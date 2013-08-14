@@ -32,7 +32,7 @@
  * License:   <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>.
  * Authors:   Masahiro Nakagawa
  */
-module MessagePack;
+module ShardTools.MessagePack;
 
 import std.array;
 import std.exception;
@@ -283,7 +283,7 @@ unittest
  */
 class MessagePackException : Exception
 {
-    this(string message)
+    this(string message) pure
     {
         super(message);
     }

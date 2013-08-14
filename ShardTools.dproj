@@ -21,6 +21,11 @@
     <UnittestMode>False</UnittestMode>
     <DebugLevel>0</DebugLevel>
     <ExtraCompilerArguments>-m64</ExtraCompilerArguments>
+    <VersionIds>
+      <VersionIds>
+        <String>logreflect</String>
+      </VersionIds>
+    </VersionIds>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <OutputPath>bin\Release</OutputPath>
@@ -109,6 +114,7 @@
     <Compile Include="ShardTools\MemcachedClient.d" />
     <Compile Include="ShardTools\PollAction.d" />
     <Compile Include="ShardTools\HashUtils.d" />
+    <Compile Include="ShardTools\Reflection.d" />
   </ItemGroup>
   <ItemGroup>
     <None Include="License Info.txt" />
