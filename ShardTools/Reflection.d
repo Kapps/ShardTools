@@ -45,7 +45,7 @@ enum TypeKind {
 
 alias Variant function(Variant instance) DataGetterFunction;
 alias void function(Variant instance, Variant value) DataSetterFunction;
-alias Variant function(void*, Variant[] args) MethodInvokeFunction;
+alias Variant function(MethodMetadata, void*, Variant[] args) MethodInvokeFunction;
 
 mixin(MakeException("ReflectionException"));
 mixin(MakeException("InvalidParameterException", "The arguments passed in to invoke a method were invalid."));
@@ -263,12 +263,21 @@ private:
 /// Provides metadata for a method, including return type, parameters, and invocation.
 struct MethodMetadata {
 	
-	this(string name, ProtectionLevel protection, MethodInvokeFunction invoker, ParameterMetadata[] parameters, TypeInfo returnType) {
+	this(string name, ProtectionLevel protection, MethodInvokeFunction invoker, ParameterMetadata[] parameters, 
+			TypeInfo returnType, size_t vtblSlot) {
 		this._name = name;
 		this._invoker = invoker;
 		this._parameters = parameters;
 		this._returnType = returnType;
 		this._protection = protection;
+		this._vtblSlot = vtblSlot;
+	}
+
+	/// Gets the index of this function within the vtbl of the type containing this method.
+	/// For an interface this is the index within the interface, which the type has a pointer to.
+	/// This value is 0 for for non-virtual methods (including final methods overriding non-final children).
+	@property size_t vtblSlot() const pure nothrow {
+		return _vtblSlot;
 	}
 
 	/// Gets the protection level for this method, such as private or public.
@@ -313,7 +322,7 @@ struct MethodMetadata {
 			}
 			instancePtr = cast(void*)&instance;
 		}
-		return _invoker(instancePtr, args);
+		return _invoker(this, instancePtr, args);
 	}
 
 	string toString() const {
@@ -333,6 +342,8 @@ private:
 	TypeInfo _returnType;
 	string _name;
 	ProtectionLevel _protection;
+	size_t _vtblSlot;
+	void* _functionPtr;
 }
 
 /// Provides metadata for fields or properties.
@@ -591,7 +602,7 @@ private SymbolContainer getSymbols(alias T)() {
 				version(logreflect) writeln("Added ", m, " as a type with metadata available to be loaded upon demand.");
 			} else static if(__traits(getOverloads, T, m).length > 0) {
 				foreach(func; __traits(getOverloads, T, m)) {
-					auto method = getMethod!(func);
+					auto method = getMethod!(func, T);
 					result._methods ~= method;
 					//version(logreflect) writeln("Added ", fullyQualifiedName!func, " overload.");
 				}
@@ -628,13 +639,27 @@ private ValueMetadata getField(alias T, string m)() {
 	return ValueMetadata(name, protection, dataKind, type, getter, setter);
 }
 
-private MethodMetadata getMethod(alias func)() {
+private MethodMetadata getMethod(alias func, T)() {
 	string functionName = __traits(identifier, func);
 	ParameterMetadata[] params = getParameters!(func);
-	auto invoker = &(invokeMethod!(func));
+	// Can't just set MPK inside static if due to ICE.
+	static if(is(T == class))
+		auto invoker = &(invokeMethod!(func, T, MethodParentKind.class_));
+	else static if(is(T == interface))
+		auto invoker = &(invokeMethod!(func, T, MethodParentKind.interface_));
+	else {
+		static assert(!__traits(isVirtualMethod, func), "Expected virtual method to have it's parent be either a class or interface.");
+		auto invoker = &(invokeMethod!(func, T, MethodParentKind.unknown));
+	}
 	TypeInfo returnType = registerLazyLoader!(ReturnType!func);
 	ProtectionLevel protection = getProtection!func;
-	return MethodMetadata(functionName, protection, invoker, params, returnType);
+	static if(__traits(isVirtualMethod, func)) {
+		size_t vtblSlot = __traits(getVirtualIndex, T, func);
+	} else {
+		size_t vtblSlot = 0;
+	}
+
+	return MethodMetadata(functionName, protection, invoker, params, returnType, vtblSlot);
 }
 
 private ParameterMetadata[] getParameters(alias func)() {
@@ -717,42 +742,82 @@ private size_t getSize(T)() {
 		return T.sizeof;
 }
 
-private Variant invokeMethod(alias func)(void* instance, Variant[] args) {
-	static if(isAbstractFunction!func) {
-		assert(0, "Unable to invoke abstract or interface functions yet.");
-	} else {
-		static if(arity!func > 0)
-			Unqual!(ParameterTypeTuple!(func)) params;
+private Variant invokeMethod(alias func, T, MethodParentKind parentType)(MethodMetadata metadata, void* instance, Variant[] args) {
+	// TODO: Look at staticMap to do this.
+	static if(arity!func > 0)
+		Unqual!(ParameterTypeTuple!(func)) params;
+	else
+		alias TypeTuple!() params;
+	static if(arity!func == 1)
+		params = args[0].get!(typeof(params));
+	else static if(arity!func > 0) {
+		foreach(i, type; ParameterTypeTuple!(func)) {
+			params[i] = args[i].get!type;
+		}
+	}
+	// TODO: Clean up return type stuffs.
+	static if(__traits(isStaticFunction, func)) {
+		static if(!is(ReturnType!func == void))
+			auto result = func(params);
 		else
-			alias TypeTuple!() params;
-		static if(arity!func == 1)
-			params = args[0].get!(typeof(params));
-		else static if(arity!func > 0) {
-			foreach(i, type; ParameterTypeTuple!(func)) {
-				params[i] = args[i].get!type;
+			func(params);
+	} else {
+		ReturnType!func delegate(ParameterTypeTuple!func) dg;
+		static if(__traits(isVirtualMethod, func)) {
+			// If this is a virtual method we'll have to handle dispatching it manually.
+			enforce(metadata.vtblSlot > 0, "Attempting to call a virtual function with no vtable index computable.");
+			size_t offset;
+			auto vtbl = getVirtualTable!(parentType)(instance, typeid(T), offset);
+			enforce(vtbl.length > metadata.vtblSlot, "An internal error occurred with vtable calculation.");
+			void* funcPtr = vtbl[metadata.vtblSlot];
+		} else {
+			void* funcPtr = cast(void*)&func;
+			size_t offset = 0;
+		}
+		dg.funcptr = cast(ReturnType!func function(ParameterTypeTuple!func))(funcPtr);
+		dg.ptr = cast(void*)instance + offset;
+		static if(!is(ReturnType!func == void))
+			auto result = dg(params);
+		else
+			dg(params);
+	}
+	static if(is(ReturnType!func == void))
+		return Variant(null);
+	else // Cast away from const to prevent Variant assignment issues. Rather sketchy.
+		return Variant(cast()result);
+}
+
+private void*[] getVirtualTable(MethodParentKind parentType)(void* instance, TypeInfo ti, out size_t offset) {
+	auto obj = cast(Object)instance;
+	if(obj is null)
+		throw new ReflectionException("Virtual methods may only be invoked on an instance that is an Object.");
+	ClassInfo ci = obj.classinfo;
+	void*[] vtbl;
+	static if(parentType == MethodParentKind.class_) {
+		return ci.vtbl;
+	} else static if(parentType == MethodParentKind.interface_) {
+		TypeInfo_Interface typeInterface = cast(TypeInfo_Interface)ti;
+		// TODO: This should be optimized.
+		// The current implementation is rather horrendously slow I'd imagine.
+		// Though the overhead of variant arguments may be just as slow...
+		for(ClassInfo curr = ci; curr; curr = curr.base) {
+			foreach(inter; ci.interfaces) {
+				if(inter.classinfo == typeInterface.info) {
+					offset = inter.offset;
+					return inter.vtbl;
+				}
 			}
 		}
-		// TODO: Clean up return type stuffs.
-		static if(__traits(isStaticFunction, func)) {
-			static if(!is(ReturnType!func == void))
-				auto result = func(params);
-			else
-				func(params);
-		} else {
-			ReturnType!func delegate(ParameterTypeTuple!func) dg;
-			// TODO: How can we handle interfaces here? Doing this is just an undefined reference...
-			dg.funcptr = cast(ReturnType!func function(ParameterTypeTuple!func))&func;
-			dg.ptr = instance;
-			static if(!is(ReturnType!func == void))
-				auto result = dg(params);
-			else
-				dg(params);
-		}
-		static if(is(ReturnType!func == void))
-			return Variant(null);
-		else // Cast away from const to prevent Variant assignment issues. Rather sketchy.
-			return Variant(cast()result);
+		throw new ReflectionException("Unable to find the vtable to invoke this method.");
+	} else {
+		static assert(0, "Expected non-virtual method when not a class or interface parent.");
 	}
+}
+
+private enum MethodParentKind {
+	unknown,
+	interface_,
+	class_
 }
 
 private Variant getFieldValue(InstanceType, size_t fieldIndex)(Variant instanceWrapper) {
@@ -858,11 +923,10 @@ private template fieldIndex(T, string field) {
 private template fieldIndexImpl (T, string field, size_t i) {
 	static if (T.tupleof.length == i)
 		enum fieldIndexImpl = -1;
-	
-	else static if (T.tupleof[i].stringof[1 + T.stringof.length + 2 .. $] == field)
+	else static if(T.tupleof[i].stringof == field) // Something changed that seems to require this?
 		enum fieldIndexImpl = i;
-	
+	//else static if (T.tupleof[i].stringof[1 + T.stringof.length + 2 .. $] == field)
+	//	enum fieldIndexImpl = i;
 	else
 		enum fieldIndexImpl = fieldIndexImpl!(T, field, i + 1);
 }
-
