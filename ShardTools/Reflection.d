@@ -439,7 +439,11 @@ TypeMetadata metadata(T)(T instance) {
 	} else static if(is(T : TypeInfo)) {
 		typeInfo = instance;
 	} else {
-		typeInfo = typeid(instance);
+		static if(is(T == interface))
+			typeInfo = (cast(Object)instance).classinfo;
+		else
+			typeInfo = typeid(instance);
+		version(logreflect) writeln("Got type info for ", typeInfo, " from ", instance);
 	}
 	// TODO: Figure out a way to lock this; can't just use typeInfo because synchronized(typeid(int)) segfaults.
 	synchronized(typeid(TypeMetadata)) {
@@ -591,7 +595,7 @@ private SymbolContainer getSymbols(alias T)() {
 		static if(is(T == enum)) {
 			ValueMetadata value = getEnumValue!(T, m);
 			result._values ~= value;
-		} else static if(fieldIndex!(T, m) != -1) {
+		} else static if(hasField!(T, m)) {
 			ValueMetadata value = getField!(T, m);
 			result._values ~= value;
 		} else static if(__traits(compiles, __traits(getMember, T, m))) {
@@ -616,6 +620,15 @@ private SymbolContainer getSymbols(alias T)() {
 	return result;
 }
 
+private bool hasField(T, string m)() {
+	static if(fieldIndex!(T, m) != -1)
+		return true;
+	else static if(is(T== class) && BaseClassesTuple!T.length > 0)
+		return hasField!(BaseClassesTuple!T[0], m);
+	else
+		return false;
+}
+
 
 private ValueMetadata getEnumValue(T, string m)() {
 	enum dataKind = DataKind.constant;
@@ -627,16 +640,20 @@ private ValueMetadata getEnumValue(T, string m)() {
 	return ValueMetadata(name, protection, dataKind, type, getter, setter);
 }
 
-private ValueMetadata getField(alias T, string m)() {
+private ValueMetadata getField(T, string m)() {
 	enum dataKind = DataKind.field;
 	string name = m;
-	TypeInfo type = typeid(typeof(T.tupleof[fieldIndex!(T, m)]));
-	DataGetterFunction getter = &getFieldValue!(T, fieldIndex!(T, m));
-	DataSetterFunction setter = &setFieldValue!(T, fieldIndex!(T, m));
-	// Get odd errors when using getProtection, so have to do it ourselves...
-	string protString = __traits(getProtection, __traits(getMember, T, m));
-	ProtectionLevel protection = to!ProtectionLevel(protString ~ "_");
-	return ValueMetadata(name, protection, dataKind, type, getter, setter);
+	static if(fieldIndex!(T, m) == -1)
+		return getField!(BaseClassesTuple!T[0], m);
+	else {
+		TypeInfo type = typeid(typeof(T.tupleof[fieldIndex!(T, m)]));
+		DataGetterFunction getter = &getFieldValue!(T, fieldIndex!(T, m));
+		DataSetterFunction setter = &setFieldValue!(T, fieldIndex!(T, m));
+		// Get odd errors when using getProtection, so have to do it ourselves...
+		string protString = __traits(getProtection, __traits(getMember, T, m));
+		ProtectionLevel protection = to!ProtectionLevel(protString ~ "_");
+		return ValueMetadata(name, protection, dataKind, type, getter, setter);
+	}
 }
 
 private MethodMetadata getMethod(alias func, T)() {
@@ -766,16 +783,14 @@ private Variant invokeMethod(alias func, T, MethodParentKind parentType)(MethodM
 		static if(__traits(isVirtualMethod, func)) {
 			// If this is a virtual method we'll have to handle dispatching it manually.
 			enforce(metadata.vtblSlot > 0, "Attempting to call a virtual function with no vtable index computable.");
-			size_t offset;
-			auto vtbl = getVirtualTable!(parentType)(instance, typeid(T), offset);
-			enforce(vtbl.length > metadata.vtblSlot, "An internal error occurred with vtable calculation.");
-			void* funcPtr = vtbl[metadata.vtblSlot];
+			size_t thisOffset;
+			void* funcPtr = getVirtualFunctionPointer!(parentType)(instance, typeid(T), metadata.vtblSlot, thisOffset);
 		} else {
 			void* funcPtr = cast(void*)&func;
-			size_t offset = 0;
+			size_t thisOffset = 0;
 		}
 		dg.funcptr = cast(ReturnType!func function(ParameterTypeTuple!func))(funcPtr);
-		dg.ptr = cast(void*)instance + offset;
+		dg.ptr = cast(void*)instance + thisOffset;
 		static if(!is(ReturnType!func == void))
 			auto result = dg(params);
 		else
@@ -787,24 +802,63 @@ private Variant invokeMethod(alias func, T, MethodParentKind parentType)(MethodM
 		return Variant(cast()result);
 }
 
-private void*[] getVirtualTable(MethodParentKind parentType)(void* instance, TypeInfo ti, out size_t offset) {
+private void* getVirtualFunctionPointer(MethodParentKind parentType)(void* instance, TypeInfo ti, size_t vtblSlot, out size_t thisOffset) {
+	// If we're operating on a virtual function, we have to worry about vtables and such.
 	auto obj = cast(Object)instance;
 	if(obj is null)
 		throw new ReflectionException("Virtual methods may only be invoked on an instance that is an Object.");
 	ClassInfo ci = obj.classinfo;
 	void*[] vtbl;
+	// For classes, this is trivial; just get the slot returned by __traits(getVirtualIndex) in it's vtable.
 	static if(parentType == MethodParentKind.class_) {
-		return ci.vtbl;
+		enforce(vtbl.length > vtblSlot);
+		thisOffset = 0;
+		return ci.vtbl[vtblSlot];
 	} else static if(parentType == MethodParentKind.interface_) {
+		// For interfaces this is a fair bit more complex.
+		// First, we have to find the right instance of Interface which stores the vtbl for that ClassInfo.
+		// That instance may not be on the ClassInfo that instance is, but rather a base class.
+		// When we find it, we can get a pointer to that class' function using the same approach as for classes.
+		// Unfortunately this won't handle overrides.
+		// So we then find the index in that class' vtbl that matches the function pointer for the interface
+		// Since it's the same class that implemented it, this is safe.
+		// If we find one, then we call that function in the derived class using that as the new vtbl slot.
+		// If we don't, it wasn't overriden.
+		// Note that we need to adjust the thisPtr if calling an interface function (but not if using it for derived vtbl).
 		TypeInfo_Interface typeInterface = cast(TypeInfo_Interface)ti;
 		// TODO: This should be optimized.
 		// The current implementation is rather horrendously slow I'd imagine.
-		// Though the overhead of variant arguments may be just as slow...
+		// Can just cache it.
+		// I'm sure there's a more proper way to do this though.
 		for(ClassInfo curr = ci; curr; curr = curr.base) {
-			foreach(inter; ci.interfaces) {
+			foreach(inter; curr.interfaces) {
 				if(inter.classinfo == typeInterface.info) {
-					offset = inter.offset;
-					return inter.vtbl;
+					enforce(inter.vtbl.length > vtblSlot);
+					auto interPtr = inter.vtbl[vtblSlot];
+					if(curr == ci) {
+						// The type of instance implements the interface, so we can use it's instance vptr directly.
+						thisOffset = inter.offset;
+						return interPtr;
+					} else {
+						// TODO: This approach is actually wrong.
+						// Not sure what the correct approach is though...
+						// Need to somehow find the function in the type's vtbl, but no clue how to do that.
+						throw new NotImplementedError("Calling functions from interface metadata on an instance which derives from the type that implements the interface is not yet supported.");
+						// Otherwise, find the vtbl index.
+						/+writeln("Trying to figure out vtbl slot for ", interPtr, ".");
+						foreach(i, ptr; curr.vtbl) {
+							writeln(ptr, " = ", ptr - inter.offset, " = ", ptr + inter.offset);
+							if(ptr == interPtr - inter.offset) {
+								writeln("Found match at ", i);
+								size_t derivedVtblSlot = i;
+								enforce(ci.vtbl.length > derivedVtblSlot);
+								return ci.vtbl[derivedVtblSlot];
+							}
+						}
+						// If not found, then not virtual and so can call directly.
+						thisOffset = inter.offset;
+						return interPtr;+/
+					}
 				}
 			}
 		}
@@ -916,8 +970,9 @@ private template isField(alias T) {
 private template fieldIndex(T, string field) {
 	static if(is(T == interface))
 		enum fieldIndex = -1;
-	else
+	else {
 		enum fieldIndex = fieldIndexImpl!(T, field, 0);
+	}
 }
 
 private template fieldIndexImpl (T, string field, size_t i) {
