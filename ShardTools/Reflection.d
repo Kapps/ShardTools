@@ -811,6 +811,7 @@ private void* getVirtualFunctionPointer(MethodParentKind parentType)(void* insta
 	void*[] vtbl;
 	// For classes, this is trivial; just get the slot returned by __traits(getVirtualIndex) in it's vtable.
 	static if(parentType == MethodParentKind.class_) {
+		vtbl = ci.vtbl;
 		enforce(vtbl.length > vtblSlot);
 		thisOffset = 0;
 		return ci.vtbl[vtblSlot];
