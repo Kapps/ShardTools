@@ -56,7 +56,7 @@ mixin(MakeException("InvalidParameterException", "The arguments passed in to inv
 // Actually even invoke could be immutable, just not pure.
 
 // TODO: name and protection can be either a mixin or in a separate Symbol struct.
-// We repeat them far too much. Note that parameters have names but not protection levels.
+// We repeat them far too much. Note that parameters and modules have names but not protection levels.
 
 /// Provides information about a module and the symbols it contains.
 struct ModuleMetadata {
@@ -319,6 +319,7 @@ struct MethodMetadata {
 			// TODO: Find a better way to check if variant.
 			static if(is(InstanceType == Variant)) {
 				// TODO: Add support for this.
+				// Is it needed? I'd imagine that a pointer to a Variant == a pointer to it's data. Maybe. Probably not. Types >X bytes may be stored as pointers.
 			}
 			instancePtr = cast(void*)&instance;
 		}
@@ -528,8 +529,12 @@ TypeInfo registerLazyLoader(T)() {
 /// Variadic arguments are not yet supported either.
 /// If no method with that name and set of arguments exists, init is returned.
 MethodMetadata findMethod(T)(T instance, string methodName, TypeInfo[] paramTypes...) if(is(T == TypeMetadata) || is(T == ModuleMetadata)) {
+	return findMethodInternal(instance.children._methods, methodName, paramTypes);
+}
+
+private MethodMetadata findMethodInternal(MethodMetadata[] methods, string methodName, TypeInfo[] paramTypes...) {
 	// TODO: Consider optimizing this.
-	foreach(ref data; instance.children._methods) {
+	foreach(ref data; methods) {
 		if(data.name == methodName) {
 			if(data.parameters.length != paramTypes.length)
 				continue;
@@ -879,6 +884,20 @@ private Variant getFieldValue(InstanceType, size_t fieldIndex)(Variant instanceW
 	InstanceType instance = instanceWrapper.get!InstanceType;
 	auto result = instance.tupleof[fieldIndex];
 	return Variant(result);
+}
+
+private Variant getPropertyValue(InstanceType)(MethodMetadata[] metadata, string methodName, Variant instanceWrapper) {
+	auto method = findMethodInternal(metadata, methodName, []);
+	if(method == MethodMetadata.init)
+		throw new ReflectionException("No getter was found for this method.");
+	return method.invoke!(InstanceType)(instanceWrapper);
+}
+
+private void setPropertyValue(InstanceType)(MethodMetadata[] metadata, string methodName, Variant instanceWrapper, Variant valueWrapper) {
+	auto method = findMethodInternal(metadata, methodName, [valueWrapper.type]);
+	if(method == MethodMetadata.init)
+		throw new RelectionException("Unable to find a setter that takes in a " ~ valueWrapper.type.text ~ ".");
+	return method.invoke!(InstanceType)(instanceWrapper, valueWrapper);
 }
 
 private void setFieldValue(InstanceType, size_t fieldIndex)(Variant instanceWrapper, Variant valueWrapper) {
