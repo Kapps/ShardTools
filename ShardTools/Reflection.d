@@ -308,7 +308,7 @@ private:
 	string _name;
 }
 
-/// Provides metadata for a method, including return type, parameters, and invocation.
+/// Provides metadata for a method (including a constructor), providing the return type, parameters, and invocation data.
 struct MethodMetadata {
 	
 	this(Symbol symbol, MethodInvokeFunction invoker, ParameterMetadata[] parameters, TypeInfo returnType, size_t vtblSlot) {
@@ -349,22 +349,31 @@ struct MethodMetadata {
 	/// In the case of static methods, instance may be null; otherwise instance must not be null.
 	/// For static methods the value of instance is ignored.
 	/// Bugs:
-	/// 	Abstract and interface methods will throw a NotImplementedError.
-	/// 	Virtual methods will have only the base method called, not the overriden one.
+	/// 	Invoking a method from an Interface's metadata on a type that derives from the type that implements the interface and overrides the
+	/// 	implemented method will result in the base implementation being called instead of the overridden method.
+	/// 	For example, if Bar implements foo on Foo, and DerivedBar inherits Bar, calling invoke on metadata from Foo
+	/// 	and passing in an instance of DerivedBar will call Bar's implementation of foo instead of DerivedBar's.
 	Variant invoke(InstanceType, T...)(InstanceType instance, T arguments) {
+		// TODO: Check if pure, non-static, and struct. If so, throw because not passed by ref.
+		return invokeInternal(instance, arguments);
+	}
+
+	/// ditto
+	Variant invoke(InstanceType, T...)(ref InstanceType instance, T arguments) if(is(T == struct)) {
+		return invokeInternal(instance, arguments);
+	}
+
+	private Variant invokeInternal(InstanceType, T...)(ref InstanceType instance, T arguments) {
 		Variant[] args = new Variant[arguments.length];
 		foreach(i, arg; arguments)
 			args[i] = arg;
 		void* instancePtr;
-		static if(is(InstanceType == class) || is(InstanceType == interface)) {
-			instancePtr = cast(void*)instance;
+		// TODO: Find a better way to check if variant.
+		static if(is(InstanceType == Variant)) {
+			// TODO: Add support for this.
+			// Is it needed? I'd imagine that a pointer to a Variant == a pointer to it's data. Maybe. Probably not. Types >X bytes may be stored as pointers.
 		} else {
-			// TODO: Find a better way to check if variant.
-			static if(is(InstanceType == Variant)) {
-				// TODO: Add support for this.
-				// Is it needed? I'd imagine that a pointer to a Variant == a pointer to it's data. Maybe. Probably not. Types >X bytes may be stored as pointers.
-			}
-			instancePtr = cast(void*)&instance;
+			instancePtr = cast(void*)instance;
 		}
 		return _invoker(this, instancePtr, args);
 	}
@@ -442,11 +451,24 @@ struct ValueMetadata {
 	}
 
 	/// Sets this member on the specified instance to the given value.
-	/// If the value is static, instance should be null.
+	/// If the value is static, instance should be init.
 	void setValue(InstanceType, ValueType)(InstanceType instance, ValueType value) {
+		// TODO: Need to so support checking for static.
+		//if(is(InstanceType == struct) && !isStatic)
+		//	throw new InvalidOperationException("A struct was passed by value to setValue to a non-static method, causing the operation to have no effect."); 
+		enforceCanSet();
+		return _setter(Variant(&instance), Variant(value));
+	}
+
+	/// ditto
+	void setValue(InstanceType, ValueType)(ref InstanceType instance, ValueType value) if(is(InstanceType == struct)) {
+		enforceCanSet();
+		return _setter(Variant(&instance), Variant(value));
+	}
+
+	private void enforceCanSet() {
 		if(!canSet)
 			throw new NotSupportedException("Attempted to set a value on a member that did not support it.");
-		_setter(Variant(instance), Variant(value));
 	}
 
 	string toString() {
@@ -974,7 +996,7 @@ private void setPropertyValue(InstanceType)(MethodMetadata[] metadata, string me
 }
 
 private void setFieldValue(InstanceType, size_t fieldIndex)(Variant instanceWrapper, Variant valueWrapper) {
-	InstanceType instance = instanceWrapper.get!InstanceType;
+	InstanceType* instance = instanceWrapper.get!(InstanceType*);
 	instance.tupleof[fieldIndex] = valueWrapper.get!(typeof(instance.tupleof[fieldIndex]));
 }
 
@@ -1077,4 +1099,75 @@ private template fieldIndexImpl (T, string field, size_t i) {
 	//	enum fieldIndexImpl = i;
 	else
 		enum fieldIndexImpl = fieldIndexImpl!(T, field, i + 1);
+}
+
+version(unittest) {
+	struct ReflectionTestStruct {
+		string stringVal;
+	}
+
+	interface ReflectionTestInterface {
+		@property int val() const;
+	}
+
+	class ReflectionTestClass : ReflectionTestInterface {
+		int _val = 3;
+
+		@property int val() const {
+			return _val;
+		}
+
+		int foo(int x = 1) {
+			return x;
+		}
+
+		this() {
+
+		}
+
+		this(int val) {
+			this._val = val;
+		}
+	}
+
+	class ReflectionDerivedClass : ReflectionTestClass {
+		@property override int val() const {
+			return super.val * 2;
+		}
+
+		int bar(int x) {
+			return x * 2;
+		}
+	}
+
+	enum ReflectionTestEnum {
+		a, b, c
+	}
+
+	enum ReflectionTestBaseEnum : string {
+		myVal = "mv",
+		myVal2 = "mv2"
+	}
+
+	// Full functionality tests.
+
+	// Basic struct tester:
+	unittest {
+		TypeMetadata metadata = createMetadata!ReflectionTestStruct;
+		ReflectionTestStruct instance = ReflectionTestStruct();
+		instance.stringVal = "abc";
+		auto children = metadata.children;
+		assert(children.types.length == 0);
+		assert(children.methods.length == 0);
+		assert(children.values.length == 1);
+		ValueMetadata field = children.values[0];
+		assert(field.name == "stringVal");
+		assert(field.protection == ProtectionLevel.public_);
+		assert(field.attributes.length == 0);
+		assert(field.getValue(instance) == "abc");
+		assert(field.type == typeid(string));
+		field.setValue(instance, "def");
+		assert(field.getValue(instance) == "def");
+		assert(field.getValue(instance).type == typeid(string));
+	}
 }
