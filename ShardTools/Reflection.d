@@ -18,6 +18,8 @@ import std.string;
 
 /// Indicates the protection level of a symbol, such as private or public.
 enum ProtectionLevel {
+	/// No protection level exists for this particular symbol.
+	none_ = 0,
 	private_,
 	protected_,
 	package_,
@@ -33,7 +35,7 @@ enum DataKind {
 }
 
 /// Indicates whether an instance of TypeMetadata provides information for a struct, class, union, interface, or enum.
-/// Also includes a primitive type, for built in types (int, long, etc) as well as pointers and arrays.
+/// Also includes a primitive type for built in types (int, long, etc) as well as pointers and arrays.
 enum TypeKind {
 	struct_, 
 	class_, 
@@ -53,10 +55,64 @@ mixin(MakeException("InvalidParameterException", "The arguments passed in to inv
 // TODO: Make all metadata immutable (except for invoke of course).
 // This includes symbols.
 // They already are after being loaded, it's just not typed properly.
-// Actually even invoke could be immutable, just not pure.
+// Actually even invoke could be immutable as it doesn't modify anything related to the metadata, just not pure.
 
 // TODO: name and protection can be either a mixin or in a separate Symbol struct.
 // We repeat them far too much. Note that parameters and modules have names but not protection levels.
+
+/// Provides information about the symbol that a metadata instance represents.
+/// This includes features such as name, protection, and user-defined attributes.
+struct Symbol {
+
+	this(string name, ProtectionLevel protection, Variant[] attributes) {
+		this._name = name;
+		this._protection = protection;
+		this._attributes = attributes;
+	}
+	
+	/// Returns the name of this symbol.
+	/// In certain cases, such as anonymous structs or unnamed parameters, this may be null.
+	@property string name() const pure nothrow {
+		return _name;
+	}
+
+	/// Returns the protection level for this symbol, such as public or private.
+	/// Some symbols may not have a protection level, such as modules and parameters.
+	/// In this case the value would be none.
+	@property ProtectionLevel protection() const pure nothrow {
+		return _protection;
+	}
+
+	/// Returns a duplicate of the array containing any attributes that apply to this symbol.
+	@property Variant[] attributes() pure {
+		// TODO: Don't duplicate, use a readonly range instead.
+		return _attributes.dup;
+	}
+
+	/// Indicates if this symbol has one or more attributes of the given type.
+	/// Note that this must be the exact type of the attribute.
+	bool hasAttribute(TypeInfo type) {
+		foreach(ref attrib; _attributes) {
+			if(attrib.type == type)
+				return true;
+		}
+		return false;
+	}
+
+	/// Returns the last specified attribute that matches type T exactly.
+	/// If no attribute is found matching that type, defaultValue is evaluated and returned.
+	T findAttribute(T)(lazy T defaultValue = T.init) {
+		foreach(ref attrib; retro(_attributes)) {
+			if(attrib.type == typeid(T))
+				return cast(T)attrib.value;
+		}
+		return defaultValue();
+	}
+
+	private string _name;
+	private ProtectionLevel _protection;
+	private Variant[] _attributes;
+}
 
 /// Provides information about a module and the symbols it contains.
 struct ModuleMetadata {
@@ -101,20 +157,21 @@ private:
 /// Stores information about a type (class, union, struct, enum, interface).
 struct TypeMetadata {
 
-	this(string name, ProtectionLevel protection, size_t instanceSize, TypeInfo type, TypeKind kind, SymbolContainer children, TypeInfo base, TypeInfo[] interfaces) {
-		this._name = name;
+	this(Symbol symbol, size_t instanceSize, TypeInfo type, TypeKind kind, SymbolContainer children, TypeInfo base, TypeInfo[] interfaces) {
+		this._symbol = symbol;
 		this._base = base;
 		this._interfaces = interfaces;
 		this._children = children;
 		this._kind = kind;
 		this._type = type;
 		this._instanceSize = instanceSize;
-		this._protection = protection;
-	}
+	} 
 
-	/// Returns the protection level of this symbol.
-	@property ProtectionLevel protection() const pure nothrow {
-		return _protection;
+	alias symbol this;
+
+	/// Gets the symbol representing the type this metadata refers to.
+	@property Symbol symbol() pure nothrow {
+		return _symbol;
 	}
 
 	/// Gets the size of a single instance of this type.
@@ -131,12 +188,6 @@ struct TypeMetadata {
 	/// Indicates what type this metadata applies to; either a struct, class, enum, interface, or union.
 	@property TypeKind kind() const pure nothrow {
 		return _kind;
-	}
-
-	/// Gets the name of this type.
-	/// This can be null for anonymous types.
-	@property string name() const pure nothrow {
-		return _name;
 	}
 
 	/// Returns the base class for this type.
@@ -158,8 +209,8 @@ struct TypeMetadata {
 		return _children;
 	}
 
-	string toString() const {
-		return protection.text[0..$-1] ~ " " ~ kind.text[0..$-1] ~ " " ~ name;
+	string toString() {
+		return symbol.protection.text[0..$-1] ~ " " ~ kind.text[0..$-1] ~ " " ~ symbol.name;
 	}
 
 private:
@@ -167,10 +218,9 @@ private:
 	TypeInfo[] _interfaces;
 	TypeInfo _type;
 	size_t _instanceSize;
-	string _name;
 	SymbolContainer _children;
 	TypeKind _kind;
-	ProtectionLevel _protection;
+	Symbol _symbol;
 }
 
 /// Provides a means of storing symbols within a type or module.
@@ -221,9 +271,7 @@ struct ParameterMetadata {
 	@property const(TypeInfo) type() const pure nothrow {
 		return _type;
 	}
-
-	/// Gets the name of this parameter.
-	/// This can be null for unnamed parameters.
+	/// Gets the name of this parameter, or null if this parameter is anonymous.
 	@property string name() const pure nothrow {
 		return _name;
 	}
@@ -263,15 +311,15 @@ private:
 /// Provides metadata for a method, including return type, parameters, and invocation.
 struct MethodMetadata {
 	
-	this(string name, ProtectionLevel protection, MethodInvokeFunction invoker, ParameterMetadata[] parameters, 
-			TypeInfo returnType, size_t vtblSlot) {
-		this._name = name;
+	this(Symbol symbol, MethodInvokeFunction invoker, ParameterMetadata[] parameters, TypeInfo returnType, size_t vtblSlot) {
+		this._symbol = symbol;
 		this._invoker = invoker;
 		this._parameters = parameters;
 		this._returnType = returnType;
-		this._protection = protection;
 		this._vtblSlot = vtblSlot;
 	}
+
+	alias symbol this;
 
 	/// Gets the index of this function within the vtbl of the type containing this method.
 	/// For an interface this is the index within the interface, which the type has a pointer to.
@@ -280,14 +328,9 @@ struct MethodMetadata {
 		return _vtblSlot;
 	}
 
-	/// Gets the protection level for this method, such as private or public.
-	@property ProtectionLevel protection() const pure nothrow {
-		return _protection;
-	}
-
-	/// Gets the name of this method.
-	@property string name() const pure nothrow {
-		return _name;
+	/// Gets the symbol of the method this instance provides metadata for.
+	@property Symbol symbol() pure nothrow {
+		return _symbol;
 	}
 
 	/// Gets the return type of this method.
@@ -326,8 +369,8 @@ struct MethodMetadata {
 		return _invoker(this, instancePtr, args);
 	}
 
-	string toString() const {
-		string result = protection.text[0..$-1] ~ " " ~ returnType.text ~ " " ~ name ~ "(";
+	string toString() {
+		string result = symbol.protection.text[0..$-1] ~ " " ~ returnType.text ~ " " ~ symbol.name ~ "(";
 		foreach(ref param; _parameters) {
 			result ~= param.text ~ ", ";
 		}
@@ -341,8 +384,7 @@ private:
 	MethodInvokeFunction _invoker;
 	ParameterMetadata[] _parameters;
 	TypeInfo _returnType;
-	string _name;
-	ProtectionLevel _protection;
+	Symbol _symbol;
 	size_t _vtblSlot;
 	void* _functionPtr;
 }
@@ -352,28 +394,24 @@ private:
 /// The setter used will then be dependent on the type passed in to setValue.
 struct ValueMetadata {
 	
-	this(string name, ProtectionLevel protection, DataKind kind, TypeInfo type, DataGetterFunction getter, DataSetterFunction setter) {
-		this._name = name;
+	this(Symbol symbol, DataKind kind, TypeInfo type, DataGetterFunction getter, DataSetterFunction setter) {
+		this._symbol = symbol;
 		this._type = type;
 		this._getter = getter;
 		this._setter = setter;
 		this._kind = kind;
-		this._protection = protection;
 	}
 
-	/// Gets the protection level for this value, such as private or public.
-	@property ProtectionLevel protection() const pure nothrow {
-		return _protection;
+	alias symbol this;
+
+	/// Gets the symbol that this instance provides metadata for.
+	@property Symbol symbol() pure nothrow {
+		return _symbol;
 	}
 
 	/// Indicates whether this value is a field or a property.
 	@property DataKind kind() const pure nothrow {
 		return _kind;
-	}
-
-	/// Gets the name of this member.
-	@property string name() const pure nothrow {
-		return _name;
 	}
 
 	/// Gets the type of this member.
@@ -411,17 +449,16 @@ struct ValueMetadata {
 		_setter(Variant(instance), Variant(value));
 	}
 
-	string toString() const {
-		return format("%s %s %s%s", kind == DataKind.constant ? "enum" : protection.text[0..$-1], type.text, name, kind == DataKind.property ? "()" : "");
+	string toString() {
+		return format("%s %s %s%s", kind == DataKind.constant ? "enum" : symbol.protection.text[0..$-1], type.text, symbol.name, kind == DataKind.property ? "()" : "");
 	}
 
 private:
 	TypeInfo _type;
 	DataGetterFunction _getter;
 	DataSetterFunction _setter;
-	string _name;
 	DataKind _kind;
-	ProtectionLevel _protection;
+	Symbol _symbol;
 }
 
 /// Returns metadata for the given object, if it's registered.
@@ -483,20 +520,18 @@ TypeMetadata createMetadata(T)() {
 		TypeMetadata existing = getStoredExisting(typeid(Unqual!T), true);
 		if(existing != TypeMetadata.init)
 			return existing;
+		Symbol symbol = getSymbol!T;
 		static if(isPrimitive!T && !is(T == enum)) {
-			string name = typeid(Unqual!T).text;
 			SymbolContainer symbols = SymbolContainer.init;
 		} else {
-			string name = __traits(identifier, Unqual!T);
 			SymbolContainer symbols = getSymbols!T;
 		}
 		TypeKind kind = getTypeKind!T;
 		TypeInfo type = typeid(Unqual!T);
 		TypeInfo base = getBase!T;
-		ProtectionLevel protection = getProtection!T;
 		size_t instanceSize = getSize!T;
 		TypeInfo[] interfaces = getInterfaces!T;
-		TypeMetadata result = TypeMetadata(name, protection, instanceSize, type, kind, symbols, base, interfaces);
+		TypeMetadata result = TypeMetadata(symbol, instanceSize, type, kind, symbols, base, interfaces);
 		//synchronized(typeid(TypeMetadata)) {
 		_typeData[typeid(Unqual!T)] = StoredTypeMetadata(result);
 		//}
@@ -574,7 +609,7 @@ Variant createInstance(ArgTypes...)(TypeMetadata metadata, ArgTypes args) {
 	TypeInfo[] argTypes = templateArgsToTypeInfo!(ArgTypes);
 	MethodMetadata method = findMethod(metadata, "__ctor", argTypes);
 	if(method == MethodMetadata.init) {
-		if(metadata.children._methods.any!(c=>c.name == "__ctor") && ArgTypes.length == 0) {
+		if(ArgTypes.length == 0 && metadata.children._methods.any!(c=>c.name == "__ctor")) {
 			ClassInfo ci = cast(ClassInfo)metadata.type;
 			Object instance = ci.create();
 			return Variant(instance);
@@ -589,6 +624,42 @@ Variant createInstance(ArgTypes...)(TypeMetadata metadata, ArgTypes args) {
 		auto retResult = method.invoke(result, args);
 		assert(result == retResult.coerce!Object);
 		return retResult;
+	}
+}
+
+// TODO: Once alias T starts working for built-in types, replace this.
+
+private Symbol getSymbol(Args...)() if(Args.length == 1) {
+	alias T = Args[0];
+	string name = getName!T;
+	ProtectionLevel protection = getProtection!T;
+	Variant[] attributes = getAttributes!T;
+	Symbol result = Symbol(name, protection, attributes);
+	return result;
+}
+
+private Variant[] getAttributes(Args...)() if(Args.length == 1) {
+	alias T = Args[0];
+	static if(!__traits(compiles, __traits(getAttributes, T))) {
+		return null;
+	} else {
+		Variant[] result = new Variant[__traits(getAttributes, T).length];
+		foreach(index, attrib; __traits(getAttributes, T)) {
+			registerLazyLoader!(typeof(attrib));
+			result[index] = Variant(attrib);
+		}
+		return result;
+	}
+}
+
+private string getName(Args...)() if(Args.length == 1) {
+	alias T = Args[0];
+	static if(is(T[0]) && isPrimitive!T && !is(T == enum)) {
+		return typeid(Unqual!T).text;
+	} else static if(__traits(compiles, Unqual!T)) {
+		return __traits(identifier, Unqual!T);
+	} else {
+		return __traits(identifier, T);
 	}
 }
 
@@ -637,32 +708,35 @@ private bool hasField(T, string m)() {
 
 private ValueMetadata getEnumValue(T, string m)() {
 	enum dataKind = DataKind.constant;
-	enum protection = getProtection!T;
-	string name = m;
+	// Enums can't have attributes or protection.
+	Symbol symbol = Symbol(m, ProtectionLevel.none_, null);
 	TypeInfo type = typeid(T);
 	DataGetterFunction getter = &getEnumConstant!(T, m);
 	DataSetterFunction setter = null;
-	return ValueMetadata(name, protection, dataKind, type, getter, setter);
+	return ValueMetadata(symbol, dataKind, type, getter, setter);
 }
 
 private ValueMetadata getField(T, string m)() {
 	enum dataKind = DataKind.field;
-	string name = m;
-	static if(fieldIndex!(T, m) == -1)
+	enum index = fieldIndex!(T, m);
+	static if(index == -1)
 		return getField!(BaseClassesTuple!T[0], m);
 	else {
-		TypeInfo type = typeid(typeof(T.tupleof[fieldIndex!(T, m)]));
-		DataGetterFunction getter = &getFieldValue!(T, fieldIndex!(T, m));
-		DataSetterFunction setter = &setFieldValue!(T, fieldIndex!(T, m));
-		// Get odd errors when using getProtection, so have to do it ourselves...
-		string protString = __traits(getProtection, __traits(getMember, T, m));
-		ProtectionLevel protection = to!ProtectionLevel(protString ~ "_");
-		return ValueMetadata(name, protection, dataKind, type, getter, setter);
+		TypeInfo type = typeid(typeof(T.tupleof[index]));
+		DataGetterFunction getter = &getFieldValue!(T, index);
+		DataSetterFunction setter = &setFieldValue!(T, index);
+		// Unfortunately have to duplicate this, couldn't get getSymbol to work with private fields.
+		// Passing in the symbol causes it to try to be evaluated and has errors with static.
+		string name = m;
+		ProtectionLevel protection = getProtection!T;
+		Variant[] attributes = getAttributes!T;
+		Symbol symbol = Symbol(name, protection, attributes);
+		return ValueMetadata(symbol, dataKind, type, getter, setter);
 	}
 }
 
 private MethodMetadata getMethod(alias func, T)() {
-	string functionName = __traits(identifier, func);
+	Symbol symbol = getSymbol!func;
 	ParameterMetadata[] params = getParameters!(func);
 	// Can't just set MPK inside static if due to ICE.
 	static if(is(T == class))
@@ -674,14 +748,13 @@ private MethodMetadata getMethod(alias func, T)() {
 		auto invoker = &(invokeMethod!(func, T, MethodParentKind.unknown));
 	}
 	TypeInfo returnType = registerLazyLoader!(ReturnType!func);
-	ProtectionLevel protection = getProtection!func;
 	static if(__traits(isVirtualMethod, func)) {
 		size_t vtblSlot = __traits(getVirtualIndex, T, func);
 	} else {
 		size_t vtblSlot = 0;
 	}
 
-	return MethodMetadata(functionName, protection, invoker, params, returnType, vtblSlot);
+	return MethodMetadata(symbol, invoker, params, returnType, vtblSlot);
 }
 
 private ParameterMetadata[] getParameters(alias func)() {

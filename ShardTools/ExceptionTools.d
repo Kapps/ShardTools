@@ -14,7 +14,7 @@ string MakeException(string ExceptionName, string ExceptionDetails, string Base 
 		"public class " ~ ExceptionName ~ " : " ~ Base ~ " {
 			public:				
 				this(string ExceptionDetails = \"" ~ ExceptionDetails ~ "\", string File = __FILE__, size_t Line = __LINE__) {
-					super(ExceptionDetails);
+					super(ExceptionDetails, File, Line);
 				}
 		}";
 }
@@ -25,7 +25,7 @@ string MakeException(string ExceptionName) {
 		"public class " ~ ExceptionName ~ " : Exception {
 			public:				
 				this(string ExceptionDetails, string File = __FILE__, size_t Line = __LINE__) {
-					super(ExceptionDetails);
+					super(ExceptionDetails, File, Line);
 				}
 		}";
 }
