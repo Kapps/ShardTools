@@ -15,6 +15,7 @@ import core.memory;
 import core.stdc.string;
 import std.exception;
 import std.string;
+import std.math;
 
 /// Indicates the protection level of a symbol, such as private or public.
 enum ProtectionLevel {
@@ -623,29 +624,38 @@ Variant invokeMethod(T, InstanceType, ArgTypes...)(T metadata, string methodName
 }
 
 /// Creates a new instance of a type given metadata and arguments to pass in to the constructor.
+/// Bugs:
+/// 	Structs are not yet supported.
 Variant createInstance(ArgTypes...)(TypeMetadata metadata, ArgTypes args) {
-	if(metadata.kind == TypeKind.interface_)
-		throw new ReflectionException("Unable to create an instance of an interface.");
-	if(metadata.kind != TypeKind.class_)
-		throw new NotImplementedError("Only creating instances of classes is supported at the moment.");
+	if(metadata.kind != TypeKind.struct_ && metadata.kind != TypeKind.interface_)
+		throw new NotSupportedException("Only structs and classes may be instantiated through createInstance.");
 	TypeInfo[] argTypes = templateArgsToTypeInfo!(ArgTypes);
 	MethodMetadata method = findMethod(metadata, "__ctor", argTypes);
-	if(method == MethodMetadata.init) {
-		if(ArgTypes.length == 0 && metadata.children._methods.any!(c=>c.name == "__ctor")) {
-			ClassInfo ci = cast(ClassInfo)metadata.type;
-			Object instance = ci.create();
-			return Variant(instance);
-		} else
-			throw new ReflectionException("No constructor found that matches the arguments passed in.");
+	if(metadata.kind == TypeKind.struct_) {
+		// TODO: Accessing m_init for some structs causes a segfault.
+		// Figure out a work-around, or else fix this.
+		// Until then, can't support structs.
+		throw new NotImplementedError("createInstance with structs");
+		//ubyte[] data = new ubyte[metada.instanceSize];
+
 	} else {
-		ubyte[] data = cast(ubyte[])GC.malloc(metadata.instanceSize)[0 .. metadata.instanceSize];
-		ClassInfo ci = cast(ClassInfo)metadata.type;
-		enforce(data.length == ci.init.length);
-		memcpy(data.ptr, ci.init[].ptr, ci.init.length);
-		Object result = cast(Object)(cast(void*)data.ptr);
-		auto retResult = method.invoke(result, args);
-		assert(result == retResult.coerce!Object);
-		return retResult;
+		if(method == MethodMetadata.init) {
+			if(ArgTypes.length == 0 && metadata.children._methods.any!(c=>c.name == "__ctor")) {
+				ClassInfo ci = cast(ClassInfo)metadata.type;
+				Object instance = ci.create();
+				return Variant(instance);
+			} else
+				throw new ReflectionException("No constructor found that matches the arguments passed in.");
+		} else {
+			ubyte[] data = cast(ubyte[])GC.malloc(metadata.instanceSize)[0 .. metadata.instanceSize];
+			ClassInfo ci = cast(ClassInfo)metadata.type;
+			enforce(data.length == ci.init.length);
+			memcpy(data.ptr, ci.init[].ptr, ci.init.length);
+			Object result = cast(Object)(cast(void*)data.ptr);
+			auto retResult = method.invoke(result, args);
+			assert(result == retResult.coerce!Object);
+			return retResult;
+		}
 	}
 }
 
@@ -1106,6 +1116,11 @@ version(unittest) {
 		string stringVal;
 	}
 
+	struct ReflectionFloatStructTester {
+		int a;
+		float b;
+	}
+
 	interface ReflectionTestInterface {
 		@property int val() const;
 	}
@@ -1169,5 +1184,10 @@ version(unittest) {
 		field.setValue(instance, "def");
 		assert(field.getValue(instance) == "def");
 		assert(field.getValue(instance).type == typeid(string));
+		// TODO: Implement
+		//auto floatTesterMeta = createMetadata!ReflectionFloatStructTester;
+		//ReflectionFloatStructTester inst2 = floatTesterMeta.createInstance.get!ReflectionFloatStructTester;
+		//assert(inst2.a == 0);
+		//assert(isNaN(inst2.b));
 	}
 }
