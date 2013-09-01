@@ -28,7 +28,12 @@ public:
 
 	/// The number of available bytes to be read.
 	@property size_t Available() const {
-		return Data.length - Position;
+		return Data.length - _Position;
+	}
+
+	/// Gets the number of bytes that have been read so far from the stream.
+	@property size_t Position() const {
+		return _Position;
 	}
 
 	/// Reads a struct of the given type from the stream.
@@ -36,31 +41,37 @@ public:
 	/// 	T = The type of struct to read.
 	@property T Read(T)() if(!is(T == class) && !is(T == interface) && !isArray!T) {
 		ensure(Available >= T.sizeof);
-		ubyte[] Slice = Data[Position..Position + T.sizeof];
+		ubyte[] Slice = Data[_Position.._Position + T.sizeof];
 		ubyte* ptr = Slice.ptr;	
 		T Result = *(cast(T*)ptr);
-		Position += T.sizeof;
+		_Position += T.sizeof;
 		return Result;
 	}
 
-	/// Reads Count elements into Buffer from the current position in the stream.
+	/// Advances the stream by the given number of bytes without performing any reads.
+	void Advance(size_t Count) {
+		ensure(Count <= Available);
+		_Position += Count;
+	}
+
+	/// Reads Count elements into Buffer from the current Position in the stream.
 	/// Params:
 	/// 	Buffer = The buffer to read elements into.
 	/// 	Count = The number of elements to read.
 	void ReadInto(void* Buffer, size_t Count) {
 		ensure(Count <= Available);
-		memcpy(Buffer, &this.Data[Position], Count);
-		Position += Count;
+		memcpy(Buffer, &this.Data[_Position], Count);
+		_Position += Count;
 	}
 	
 	/// Reads a null terminated string.
 	string ReadTerminatedString() {
-		// TODO: What a terrible implementation; optimize it.
+		// TODO: Terrible implementation; optimize it.
 		// Do just a slice, not N appends.
 		string Result = "";
-		for(size_t i = Position; i < Data.length; i++) {
+		for(size_t i = _Position; i < Data.length; i++) {
 			if(Data[i] == 0) {
-				Position = i + 1;
+				_Position = i + 1;
 				return Result;
 			} else
 				Result ~= cast(char)Data[i];
@@ -71,7 +82,7 @@ public:
 	/// Returns the remaining data left to be read.
 	/// Keep in mind that this array will get out of sync with the reader after any more calls to the reader.
 	@property ubyte[] RemainingData() {
-		return Data[Position..Length];
+		return Data[_Position..Length];
 	}
 
 	/// Reads an array of T with the given number of elements.
@@ -81,9 +92,9 @@ public:
 	/// 	T = The type of struct to read.
 	T[] ReadArray(T)(size_t Count) if(!is(T == class) && !is(T == interface)) {
 		ensure(T.sizeof * Count <= Available);
-		ubyte[] Section = Data[Position .. Position + (T.sizeof * Count)];
+		ubyte[] Section = Data[_Position .. _Position + (T.sizeof * Count)];
 		T[] Result = cast(T[])Section;
-		Position += Count * T.sizeof;
+		_Position += Count * T.sizeof;
 		return Result;
 	}
 
@@ -118,5 +129,5 @@ public:
 	
 private:
 	ubyte[] Data;
-	size_t Position;
+	size_t _Position;
 }

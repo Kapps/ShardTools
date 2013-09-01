@@ -3000,8 +3000,11 @@ struct Value
     /**
      * Comparison for equality. @trusted for union.
      */
-    @trusted
-    bool opEquals(Tdummy = void)(ref const Value other) const
+
+	// EDITED FROM ORIGINAL MESSAGEPACK.D:
+	// TODO: Temporarily removed due to compiler issues. Fix this!
+	// I figured @safe const pure nothrow would do it, but perhaps not.
+    /+bool opEquals(Tdummy = void)(ref const Value other) const @safe pure nothrow
     {
         if (type != other.type)
             return false;
@@ -3020,9 +3023,8 @@ struct Value
 
 
     /// ditto
-    @trusted
-    bool opEquals(T : bool)(in T other) const
-    {
+	bool opEquals(T : bool)(in T other) const @safe pure nothrow
+	{
         if (type != Type.boolean)
             return false;
 
@@ -3031,9 +3033,8 @@ struct Value
 
 
     /// ditto
-    @trusted
-    bool opEquals(T : ulong)(in T other) const
-    {
+	bool opEquals(T : ulong)(in T other) const @safe pure nothrow
+	{
         static if (__traits(isUnsigned, T)) {
             if (type != Type.unsigned)
                 return false;
@@ -3049,9 +3050,8 @@ struct Value
 
 
     /// ditto
-    @trusted
-    bool opEquals(T : real)(in T other) const
-    {
+	bool opEquals(T : real)(in T other) const @safe pure nothrow
+	{
         if (type != Type.floating)
             return false;
 
@@ -3060,9 +3060,8 @@ struct Value
 
 
     /// ditto
-    @trusted
-    bool opEquals(T : const Value[])(in T other) const
-    {
+	bool opEquals(T : const Value[])(in T other) const @safe pure nothrow
+	{
         if (type != Type.array)
             return false;
 
@@ -3071,9 +3070,8 @@ struct Value
 
 
     /// ditto
-    @trusted
-    bool opEquals(T : const Value[Value])(in T other) const
-    {
+	bool opEquals(T : const Value[Value])(in T other) const @safe pure nothrow
+	{
         if (type != Type.map)
             return false;
 
@@ -3092,14 +3090,13 @@ struct Value
 
 
     /// ditto
-    @trusted
-    bool opEquals(T : ubyte[])(in T other) const
-    {
+	bool opEquals(T : ubyte[])(in T other) const @safe pure nothrow
+	{
         if (type != Type.raw)
             return false;
 
         return via.raw == other;
-    }
+    }+/
 }
 
 
@@ -4546,7 +4543,9 @@ template getFieldName(Type, size_t i)
     static assert(i < Type.tupleof.length, text(Type.stringof, " has ", Type.tupleof.length, " attributes: given index = ", i));
 
     // 3 means () + .
-    enum getFieldName = Type.tupleof[i].stringof[3 + Type.stringof.length..$];
+	// Temporarily removed because DMD seems to have changed tupleof to report only name?
+    //enum getFieldName = Type.tupleof[i].stringof[3 + Type.stringof.length..$];
+	enum getFieldName = Type.tupleof[i].stringof;
 }
 
 
