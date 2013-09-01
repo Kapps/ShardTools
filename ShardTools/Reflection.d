@@ -709,18 +709,34 @@ private SymbolContainer getSymbols(alias T)() {
 		} else static if(__traits(compiles, __traits(getMember, T, m))) {
 			//version(logreflect) writeln("Processing member ", m, " on ", T.stringof, ".");
 			alias aliasSelf!(__traits(getMember, T, m)) member;
+			MethodMetadata propertyGetter;
+			MethodMetadata[] propertySetters;
 			static if(isType!member) {
 				result._types ~= registerLazyLoader!(typeof(member));
 				version(logreflect) writeln("Added ", m, " as a type with metadata available to be loaded upon demand.");
 			} else static if(__traits(getOverloads, T, m).length > 0) {
 				foreach(func; __traits(getOverloads, T, m)) {
 					auto method = getMethod!(func, T);
-					result._methods ~= method;
+					/+static if(functionAttributes!method & FunctionAttribute.property) {
+						// A getter is defined as a property that returns non-void and takes in zero parameters.
+						if(arity!method == 0 && !is(ReturnType!method == void)) {
+							assert(propertyGetter == MethodMetadata.init);
+							propertyGetter = method;
+						} else {
+							// Otherwise, it's a setter.
+							propertySetters ~= method;
+						}
+					} else {+/
+						result._methods ~= method;
+					//}
 					//version(logreflect) writeln("Added ", fullyQualifiedName!func, " overload.");
 				}
 			} else {
 				version(logreflect) writeln("Skipped unknown member ", m, " on ", T.stringof, ".");
 			}
+			/+if(propertyGetter || propertySetters) {
+				result._values ~= getProperty!(T, m)(propertyGetter, propertySetters);
+			}+/
 		} else {
 			version(logreflect) writeln("Skipped member ", m, " on ", T.stringof, " because it was not accessible.");
 		}
@@ -767,6 +783,14 @@ private ValueMetadata getField(T, string m)() {
 	}
 }
 
+private ValueMetadata getProperty(T, string m)(MethodMetadata getter, MethodMetadata[] setters) {
+	enum dataKind = DataKind.property;
+	TypeInfo type = getter.returnType;
+	string name = m;
+	Symbol s = getter.symbol;
+
+}
+
 private MethodMetadata getMethod(alias func, T)() {
 	Symbol symbol = getSymbol!func;
 	ParameterMetadata[] params = getParameters!(func);
@@ -798,7 +822,7 @@ private ParameterMetadata[] getParameters(alias func)() {
 			Variant defaultVal = null;
 		} else {
 			Variant defaultVal = Variant(ParameterDefaultValueTuple!(func)[paramIndex]);
-			bool hasDefaultVal = true;
+			bool hasDefaultValue = true;
 		}
 		ParameterStorageClass storageClass = cast(ParameterStorageClass)ParameterStorageClassTuple!(func)[paramIndex];
 		ParameterMetadata paramData = ParameterMetadata(paramType, paramName, hasDefaultValue, defaultVal, storageClass);
@@ -1189,5 +1213,14 @@ version(unittest) {
 		//ReflectionFloatStructTester inst2 = floatTesterMeta.createInstance.get!ReflectionFloatStructTester;
 		//assert(inst2.a == 0);
 		//assert(isNaN(inst2.b));
+	}
+
+	// Basic class tester:
+	@disable unittest {
+		TypeMetadata metadata = createMetadata!ReflectionTestClass;
+		ReflectionTestClass instance = new ReflectionTestClass();
+		auto children = metadata.children;
+		assert(children.methods.length == 4); // TODO: Should be 3, one is a property.
+		//MethodMetadata prop = children.methods[0];
 	}
 }
