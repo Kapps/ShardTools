@@ -46,8 +46,8 @@ enum TypeKind {
 	primitive_
 }
 
-alias Variant function(Variant instance) DataGetterFunction;
-alias void function(Variant instance, Variant value) DataSetterFunction;
+alias Variant function(ValueMetadata metadata, Variant instance) DataGetterFunction;
+alias void function(ValueMetadata metadata, Variant instance, Variant value) DataSetterFunction;
 alias Variant function(MethodMetadata, void*, Variant[] args) MethodInvokeFunction;
 
 mixin(MakeException("ReflectionException"));
@@ -356,27 +356,34 @@ struct MethodMetadata {
 	/// 	and passing in an instance of DerivedBar will call Bar's implementation of foo instead of DerivedBar's.
 	Variant invoke(InstanceType, T...)(InstanceType instance, T arguments) {
 		// TODO: Check if pure, non-static, and struct. If so, throw because not passed by ref.
-		return invokeInternal(instance, arguments);
+		// Maybe make version(logreflect) log it.
+		return invokeInternal(&instance, arguments);
 	}
 
 	/// ditto
 	Variant invoke(InstanceType, T...)(ref InstanceType instance, T arguments) if(is(T == struct)) {
-		return invokeInternal(instance, arguments);
+		return invokeInternal(&instance, arguments);
 	}
 
-	private Variant invokeInternal(InstanceType, T...)(ref InstanceType instance, T arguments) {
+	private Variant invokeInternal(InstanceType, T...)(InstanceType* instancePtr, T arguments) {
 		Variant[] args = new Variant[arguments.length];
 		foreach(i, arg; arguments)
 			args[i] = arg;
-		void* instancePtr;
+		// If it's a class, the context pointer should be the reference.
+		// Otherwise if it's a struct, a pointer to the struct.
+		static if(is(InstanceType == struct))
+			void* contextPtr = cast(void*)instancePtr;
+		else
+			void* contextPtr = cast(void*)(*instancePtr);
+		/+void* instancePtr;
 		// TODO: Find a better way to check if variant.
 		static if(is(InstanceType == Variant)) {
 			// TODO: Add support for this.
 			// Is it needed? I'd imagine that a pointer to a Variant == a pointer to it's data. Maybe. Probably not. Types >X bytes may be stored as pointers.
 		} else {
 			instancePtr = cast(void*)instance;
-		}
-		return _invoker(this, instancePtr, args);
+		}+/
+		return _invoker(this, contextPtr, args);
 	}
 
 	string toString() {
@@ -404,12 +411,17 @@ private:
 /// The setter used will then be dependent on the type passed in to setValue.
 struct ValueMetadata {
 	
-	this(Symbol symbol, DataKind kind, TypeInfo type, DataGetterFunction getter, DataSetterFunction setter) {
+	this(T)(Symbol symbol, DataKind kind, TypeInfo type, DataGetterFunction getter, DataSetterFunction setter, T backingData) 
+			if(is(T == FieldValueMetadata) || is(T == PropertyValueMetadata)) {
 		this._symbol = symbol;
 		this._type = type;
 		this._getter = getter;
 		this._setter = setter;
 		this._kind = kind;
+		static if(is(T == FieldValueMetadata))
+			this._fieldData = backingData;
+		else
+			this._propertyData = backingData;
 	}
 
 	alias symbol this;
@@ -424,7 +436,25 @@ struct ValueMetadata {
 		return _kind;
 	}
 
-	/// Gets the type of this member.
+	/// Gets information about the field that this value references.
+	/// If kind is not set to field or constant, a ReflectionException is thrown.
+	@property FieldValueMetadata fieldData() {
+		if(kind != DataKind.constant && kind != DataKind.field)
+			throw new ReflectionException("Unable to get the field data for a value that is not a field or constant.");
+		return _fieldData;
+	}
+
+	/// Gets information about the property that this value references.
+	/// This includes both the getter method and setter methods for the value.
+	/// Each method contained by this value contains the appropriate symbol.
+	/// This allows you to get method-specific attributes or other such data.
+	@property PropertyValueMetadata propertyData() {
+		if(kind != DataKind.property)
+			throw new ReflectionException("Unable to get the property data for a value that is not a property.");
+		return _propertyData;
+	}
+
+	/// Gets the type of the value.
 	@property const(TypeInfo) type() const pure nothrow {
 		return _type;
 	}
@@ -447,7 +477,7 @@ struct ValueMetadata {
 	Variant getValue(InstanceType)(InstanceType instance) {
 		if(!canGet)
 			throw new NotSupportedException("Attempted to get a value on a member that did not support it.");
-		Variant result = _getter(Variant(instance));
+		Variant result = _getter(this, Variant(instance));
 		return result;
 	}
 
@@ -458,13 +488,13 @@ struct ValueMetadata {
 		//if(is(InstanceType == struct) && !isStatic)
 		//	throw new InvalidOperationException("A struct was passed by value to setValue to a non-static method, causing the operation to have no effect."); 
 		enforceCanSet();
-		return _setter(Variant(&instance), Variant(value));
+		return _setter(this, Variant(&instance), Variant(value));
 	}
 
 	/// ditto
 	void setValue(InstanceType, ValueType)(ref InstanceType instance, ValueType value) if(is(InstanceType == struct)) {
 		enforceCanSet();
-		return _setter(Variant(&instance), Variant(value));
+		return _setter(this, Variant(&instance), Variant(value));
 	}
 
 	private void enforceCanSet() {
@@ -482,6 +512,70 @@ private:
 	DataSetterFunction _setter;
 	DataKind _kind;
 	Symbol _symbol;
+	union {
+		FieldValueMetadata _fieldData;
+		PropertyValueMetadata _propertyData;
+	}
+}
+
+/// Provides backing information for a field referenced by a ValueMetadata instance.
+struct FieldValueMetadata {
+
+	this(size_t index, size_t offset, TypeInfo type) {
+		this._index = index;
+		this._offset = offset;
+		this._type = type;
+	}
+
+	/// Gets the index of the field within the type containing it.
+	/// Note that it is possible for two fields to have the same index in the case
+	/// where a class derived from another class that implements the field.
+	/// The index is guaranteed to be unique on type however.
+	@property size_t index() const {
+		return _index;
+	}
+
+	/// Gets the offset, in bytes, of the location of this field within the type.
+	/// The D ABI specifies that this will be the same for classes deriving from type.
+	@property size_t offset() const {
+		return _offset;
+	}
+
+	/// Gets the type that declares this field.
+	@property TypeInfo type() {
+		return _type;
+	}
+
+private:
+	size_t _index;
+	size_t _offset;
+	TypeInfo _type;
+}
+
+/// Provides backing information for a property referenced by a ValueMetadata instance.
+/// This includes the property's getter method and all of it's setter methods.
+struct PropertyValueMetadata {
+
+	this(MethodMetadata getter, MethodMetadata[] setters) {
+		this._getter = getter;
+		this._setters = setters;
+	}
+
+	/// Returns the method that's used to get the value of this property.
+	/// A getter is defined as a method marked with @property that has zero parameters.
+	@property MethodMetadata getter() {
+		return _getter;
+	}
+
+	/// Returns a duplicate of the array that contains the setter methods for this property.
+	/// A setter is defined as a method marked with @property that contains parameters.
+	@property MethodMetadata[] setters() {
+		// TODO: Again, a readonly array return-type that doesn't make each item const.
+		return _setters.dup;
+	}
+
+	private MethodMetadata _getter;
+	private MethodMetadata[] _setters;
 }
 
 /// Returns metadata for the given object, if it's registered.
@@ -578,6 +672,17 @@ TypeInfo registerLazyLoader(T)() {
 	}
 	//}
 	return typeid(Unqual!T);
+}
+
+/// Returns the value on the given type that has the specified name.
+/// This name is guaranteed to be unique on that type.
+/// If no value is found, init is returned.
+ValueMetadata findValue(T)(T instance, string name) {
+	foreach(ref val; instance.children._values) {
+		if(val.name == name)
+			return val;
+	}
+	return ValueMetadata.init;
 }
 
 /// Returns the first method with the specified name on the given instance metadata.
@@ -717,26 +822,26 @@ private SymbolContainer getSymbols(alias T)() {
 			} else static if(__traits(getOverloads, T, m).length > 0) {
 				foreach(func; __traits(getOverloads, T, m)) {
 					auto method = getMethod!(func, T);
-					/+static if(functionAttributes!method & FunctionAttribute.property) {
+					static if(functionAttributes!func & FunctionAttribute.property) {
 						// A getter is defined as a property that returns non-void and takes in zero parameters.
-						if(arity!method == 0 && !is(ReturnType!method == void)) {
+						if(arity!func == 0 && !is(ReturnType!func == void)) {
 							assert(propertyGetter == MethodMetadata.init);
 							propertyGetter = method;
 						} else {
 							// Otherwise, it's a setter.
 							propertySetters ~= method;
 						}
-					} else {+/
+					} else {
 						result._methods ~= method;
-					//}
+					}
 					//version(logreflect) writeln("Added ", fullyQualifiedName!func, " overload.");
 				}
 			} else {
 				version(logreflect) writeln("Skipped unknown member ", m, " on ", T.stringof, ".");
 			}
-			/+if(propertyGetter || propertySetters) {
-				result._values ~= getProperty!(T, m)(propertyGetter, propertySetters);
-			}+/
+			if(propertyGetter != MethodMetadata.init || propertySetters.length > 0) {
+				result._values ~= getProperty!(T)(propertyGetter, propertySetters);
+			}
 		} else {
 			version(logreflect) writeln("Skipped member ", m, " on ", T.stringof, " because it was not accessible.");
 		}
@@ -771,6 +876,7 @@ private ValueMetadata getField(T, string m)() {
 		return getField!(BaseClassesTuple!T[0], m);
 	else {
 		TypeInfo type = typeid(typeof(T.tupleof[index]));
+		size_t offset = __traits(getMember, T, m).offsetof;
 		DataGetterFunction getter = &getFieldValue!(T, index);
 		DataSetterFunction setter = &setFieldValue!(T, index);
 		// Unfortunately have to duplicate this, couldn't get getSymbol to work with private fields.
@@ -779,16 +885,23 @@ private ValueMetadata getField(T, string m)() {
 		ProtectionLevel protection = getProtection!T;
 		Variant[] attributes = getAttributes!T;
 		Symbol symbol = Symbol(name, protection, attributes);
-		return ValueMetadata(symbol, dataKind, type, getter, setter);
+		FieldValueMetadata fieldData = FieldValueMetadata(index, offset, type);
+		return ValueMetadata(symbol, dataKind, type, getter, setter, fieldData);
 	}
 }
 
-private ValueMetadata getProperty(T, string m)(MethodMetadata getter, MethodMetadata[] setters) {
-	enum dataKind = DataKind.property;
-	TypeInfo type = getter.returnType;
-	string name = m;
-	Symbol s = getter.symbol;
-
+private ValueMetadata getProperty(T)(MethodMetadata getterMethod, MethodMetadata[] setterMethods) {
+	enum kind = DataKind.property;
+	TypeInfo type = getterMethod._returnType;
+	string name = getterMethod.symbol._name;
+	ProtectionLevel protection = getterMethod.symbol._protection;
+	// We default to the getter's name and protection, but no attributes.
+	// Attributes should be gotten for each individual method.
+	Symbol symbol = Symbol(name, protection, null);
+	PropertyValueMetadata propertyData = PropertyValueMetadata(getterMethod, setterMethods);
+	DataGetterFunction getter = &getPropertyValue!(T);
+	DataSetterFunction setter = &setPropertyValue!(T);
+	return ValueMetadata(symbol, kind, type, getter, setter, propertyData);
 }
 
 private MethodMetadata getMethod(alias func, T)() {
@@ -805,7 +918,12 @@ private MethodMetadata getMethod(alias func, T)() {
 	}
 	TypeInfo returnType = registerLazyLoader!(ReturnType!func);
 	static if(__traits(isVirtualMethod, func)) {
-		size_t vtblSlot = __traits(getVirtualIndex, T, func);
+		static if(__traits(compiles, __traits(getVirtualIndex, T, func)))
+			size_t vtblSlot = __traits(getVirtualIndex, T, func);
+		else {
+			pragma(msg, "Your compiler does not support __traits(getVirtualIndex). Invoking virtual methods will fail.");
+			size_t vtblSlot = 0;
+		}
 	} else {
 		size_t vtblSlot = 0;
 	}
@@ -895,6 +1013,8 @@ private size_t getSize(T)() {
 
 private Variant invokeMethod(alias func, T, MethodParentKind parentType)(MethodMetadata metadata, void* instance, Variant[] args) {
 	// TODO: Look at staticMap to do this.
+	if(args.length != arity!func)
+		throw new ReflectionException("Expected " ~ arity!func.text ~ " arguments to " ~ metadata.name ~ ", not " ~ args.length.text ~ ".");
 	static if(arity!func > 0)
 		Unqual!(ParameterTypeTuple!(func)) params;
 	else
@@ -1009,33 +1129,41 @@ private enum MethodParentKind {
 	class_
 }
 
-private Variant getFieldValue(InstanceType, size_t fieldIndex)(Variant instanceWrapper) {
+private Variant getFieldValue(InstanceType, size_t fieldIndex)(ValueMetadata metadata, Variant instanceWrapper) {
 	InstanceType instance = instanceWrapper.get!InstanceType;
+	// TODO: We can likely reduce template bloat if we can make the below work at compile-time instead of fieldIndex.
+	// For example, by manually making a switch statement that gets the right value.
+	// That might create more bloat than it saves though, not sure...
+	// For now, this works fine.
+	//auto result = instance.tupleof[metadata.fieldData.index];
 	auto result = instance.tupleof[fieldIndex];
 	return Variant(result);
 }
 
-private Variant getPropertyValue(InstanceType)(MethodMetadata[] metadata, string methodName, Variant instanceWrapper) {
-	auto method = findMethodInternal(metadata, methodName, []);
-	if(method == MethodMetadata.init)
-		throw new ReflectionException("No getter was found for this method.");
-	return method.invoke!(InstanceType)(instanceWrapper);
-}
-
-private void setPropertyValue(InstanceType)(MethodMetadata[] metadata, string methodName, Variant instanceWrapper, Variant valueWrapper) {
-	auto method = findMethodInternal(metadata, methodName, [valueWrapper.type]);
-	if(method == MethodMetadata.init)
-		throw new RelectionException("Unable to find a setter that takes in a " ~ valueWrapper.type.text ~ ".");
-	return method.invoke!(InstanceType)(instanceWrapper, valueWrapper);
-}
-
-private void setFieldValue(InstanceType, size_t fieldIndex)(Variant instanceWrapper, Variant valueWrapper) {
+private void setFieldValue(InstanceType, size_t fieldIndex)(ValueMetadata metadata, Variant instanceWrapper, Variant valueWrapper) {
+	// TODO: Same as for getFieldValue. Remove fieldIndex tempalte param.
+	//size_t fieldIndex = metadata.fieldData.index;
 	InstanceType* instance = instanceWrapper.get!(InstanceType*);
 	instance.tupleof[fieldIndex] = valueWrapper.get!(typeof(instance.tupleof[fieldIndex]));
 }
 
+private Variant getPropertyValue(InstanceType)(ValueMetadata metadata, Variant instanceWrapper) {
+	auto method = metadata.propertyData.getter;
+	if(method == MethodMetadata.init)
+		throw new ReflectionException("No getter was found for this method.");
+	return method.invoke!(InstanceType)(instanceWrapper.get!(InstanceType));
+}
+
+private void setPropertyValue(InstanceType)(ValueMetadata metadata, Variant instanceWrapper, Variant valueWrapper) {
+	auto setters = metadata.propertyData.setters;
+	auto method = findMethodInternal(setters, metadata.symbol.name, [valueWrapper.type]);
+	if(method == MethodMetadata.init)
+		throw new ReflectionException("Unable to find a setter that takes in a " ~ valueWrapper.type.text ~ ".");
+	method.invokeInternal!(InstanceType)(instanceWrapper.get!(InstanceType*), valueWrapper);
+}
+
 private Variant getEnumConstant(T, string m)(Variant instance) {
-	// NOTE: cast not to, in order to prevent to!string(enum) which is wrong if base is string.
+	// NOTE: cast instead of to, in order to prevent to!string(enum) which is wrong if base is string.
 	return Variant(cast(OriginalType!T)__traits(getMember, T, m));
 }
 
@@ -1138,6 +1266,17 @@ private template fieldIndexImpl (T, string field, size_t i) {
 version(unittest) {
 	struct ReflectionTestStruct {
 		string stringVal;
+
+		@property string stringValProperty() const {
+			return stringVal;
+		}
+	}
+
+	struct ReflectionTestAttribute {
+		int val;
+		this(int val) {
+			this.val = val;
+		}
 	}
 
 	struct ReflectionFloatStructTester {
@@ -1198,8 +1337,8 @@ version(unittest) {
 		auto children = metadata.children;
 		assert(children.types.length == 0);
 		assert(children.methods.length == 0);
-		assert(children.values.length == 1);
-		ValueMetadata field = children.values[0];
+		assert(children.values.length == 2);
+		ValueMetadata field = metadata.findValue("stringVal");
 		assert(field.name == "stringVal");
 		assert(field.protection == ProtectionLevel.public_);
 		assert(field.attributes.length == 0);
@@ -1208,6 +1347,10 @@ version(unittest) {
 		field.setValue(instance, "def");
 		assert(field.getValue(instance) == "def");
 		assert(field.getValue(instance).type == typeid(string));
+		assert(instance.stringVal == "def");
+		ValueMetadata prop = metadata.findValue("stringValProperty");
+		assert(prop.getValue(instance) == "def");
+		assert(prop.propertyData.getter.name == "stringValProperty");
 		// TODO: Implement
 		//auto floatTesterMeta = createMetadata!ReflectionFloatStructTester;
 		//ReflectionFloatStructTester inst2 = floatTesterMeta.createInstance.get!ReflectionFloatStructTester;
@@ -1216,11 +1359,24 @@ version(unittest) {
 	}
 
 	// Basic class tester:
-	@disable unittest {
+	unittest {
 		TypeMetadata metadata = createMetadata!ReflectionTestClass;
 		ReflectionTestClass instance = new ReflectionTestClass();
 		auto children = metadata.children;
-		assert(children.methods.length == 4); // TODO: Should be 3, one is a property.
-		//MethodMetadata prop = children.methods[0];
+		auto firstMethod = metadata.findMethod("foo", [typeid(int)]);
+		assert(firstMethod != MethodMetadata.init);
+		assert(firstMethod.invoke(instance, 3) == 3);
+		assert(metadata.invokeMethod("foo", instance, 4) == 4);
+		assert(metadata.findMethod("val") == MethodMetadata.init);
+		ValueMetadata val = metadata.findValue("val");
+		assert(val != MethodMetadata.init);
+		assert(val.getValue(instance) == 3);
+	}
+
+	// UDA tests
+	unittest {
+		/+Symbol getterSymbol = prop.propertyData.getter;
+		assert(getterSymbol.hasAttribute(typeid(ReflectionTestAttribute)));
+		assert(getterSymbol.findAttribute!ReflectionTestAttribute == ReflectionTestAttribute(6));+/
 	}
 }
