@@ -373,7 +373,10 @@ struct MethodMetadata {
 		// Otherwise if it's a struct, a pointer to the struct.
 		static if(is(InstanceType == struct))
 			void* contextPtr = cast(void*)instancePtr;
-		else
+		else static if(is(InstanceType == interface)) {
+			// If it's an interface, casting to void* is offset by the instance's offset value.
+			void* contextPtr = cast(void*)cast(Object)*instancePtr;
+		} else
 			void* contextPtr = cast(void*)(*instancePtr);
 		/+void* instancePtr;
 		// TODO: Find a better way to check if variant.
@@ -732,7 +735,7 @@ Variant invokeMethod(T, InstanceType, ArgTypes...)(T metadata, string methodName
 /// Bugs:
 /// 	Structs are not yet supported.
 Variant createInstance(ArgTypes...)(TypeMetadata metadata, ArgTypes args) {
-	if(metadata.kind != TypeKind.struct_ && metadata.kind != TypeKind.interface_)
+	if(metadata.kind != TypeKind.struct_ && metadata.kind != TypeKind.class_)
 		throw new NotSupportedException("Only structs and classes may be instantiated through createInstance.");
 	TypeInfo[] argTypes = templateArgsToTypeInfo!(ArgTypes);
 	MethodMetadata method = findMethod(metadata, "__ctor", argTypes);
@@ -778,15 +781,21 @@ private Symbol getSymbol(Args...)() if(Args.length == 1) {
 private Variant[] getAttributes(Args...)() if(Args.length == 1) {
 	alias T = Args[0];
 	static if(!__traits(compiles, __traits(getAttributes, T))) {
+		version(logreflect) writeln("Calling getAttributes on " ~ T.stringof ~ " does not compile. Returning null.");
 		return null;
 	} else {
-		Variant[] result = new Variant[__traits(getAttributes, T).length];
-		foreach(index, attrib; __traits(getAttributes, T)) {
-			registerLazyLoader!(typeof(attrib));
-			result[index] = Variant(attrib);
-		}
-		return result;
+		auto tup = __traits(getAttributes, T);
+		return attributeTupleToArray(tup);
 	}
+}
+
+private Variant[] attributeTupleToArray(T...)(T tup) {
+	Variant[] result = new Variant[tup.length];
+	foreach(index, attrib; tup) {
+		registerLazyLoader!(typeof(attrib));
+		result[index] = Variant(attrib);
+	}
+	return result;
 }
 
 private string getName(Args...)() if(Args.length == 1) {
@@ -814,12 +823,12 @@ private SymbolContainer getSymbols(alias T)() {
 		} else static if(__traits(compiles, __traits(getMember, T, m))) {
 			//version(logreflect) writeln("Processing member ", m, " on ", T.stringof, ".");
 			alias aliasSelf!(__traits(getMember, T, m)) member;
-			MethodMetadata propertyGetter;
-			MethodMetadata[] propertySetters;
 			static if(isType!member) {
 				result._types ~= registerLazyLoader!(typeof(member));
 				version(logreflect) writeln("Added ", m, " as a type with metadata available to be loaded upon demand.");
 			} else static if(__traits(getOverloads, T, m).length > 0) {
+				MethodMetadata propertyGetter;
+				MethodMetadata[] propertySetters;
 				foreach(func; __traits(getOverloads, T, m)) {
 					auto method = getMethod!(func, T);
 					static if(functionAttributes!func & FunctionAttribute.property) {
@@ -834,13 +843,11 @@ private SymbolContainer getSymbols(alias T)() {
 					} else {
 						result._methods ~= method;
 					}
-					//version(logreflect) writeln("Added ", fullyQualifiedName!func, " overload.");
 				}
+				if(propertyGetter != MethodMetadata.init || propertySetters.length > 0)
+					result._values ~= getProperty!(T)(propertyGetter, propertySetters);
 			} else {
 				version(logreflect) writeln("Skipped unknown member ", m, " on ", T.stringof, ".");
-			}
-			if(propertyGetter != MethodMetadata.init || propertySetters.length > 0) {
-				result._values ~= getProperty!(T)(propertyGetter, propertySetters);
 			}
 		} else {
 			version(logreflect) writeln("Skipped member ", m, " on ", T.stringof, " because it was not accessible.");
@@ -883,7 +890,8 @@ private ValueMetadata getField(T, string m)() {
 		// Passing in the symbol causes it to try to be evaluated and has errors with static.
 		string name = m;
 		ProtectionLevel protection = getProtection!T;
-		Variant[] attributes = getAttributes!T;
+		auto unparsedAttribs = __traits(getAttributes, __traits(getMember, T, m));
+		Variant[] attributes = attributeTupleToArray(unparsedAttribs);
 		Symbol symbol = Symbol(name, protection, attributes);
 		FieldValueMetadata fieldData = FieldValueMetadata(index, offset, type);
 		return ValueMetadata(symbol, dataKind, type, getter, setter, fieldData);
@@ -1073,18 +1081,12 @@ private void* getVirtualFunctionPointer(MethodParentKind parentType)(void* insta
 		// For interfaces this is a fair bit more complex.
 		// First, we have to find the right instance of Interface which stores the vtbl for that ClassInfo.
 		// That instance may not be on the ClassInfo that instance is, but rather a base class.
-		// When we find it, we can get a pointer to that class' function using the same approach as for classes.
+		// When we find it, we can get a pointer to that class' implementation using the same approach as for classes.
+		// Aka, vtblSlot within the object.Interface instance's vtbl.
 		// Unfortunately this won't handle overrides.
-		// So we then find the index in that class' vtbl that matches the function pointer for the interface
-		// Since it's the same class that implemented it, this is safe.
-		// If we find one, then we call that function in the derived class using that as the new vtbl slot.
-		// If we don't, it wasn't overriden.
-		// Note that we need to adjust the thisPtr if calling an interface function (but not if using it for derived vtbl).
+		// Also, interface context pointers are actually offset by the object.Interface.offset value.
+		// So we have to handle that as well, and set thisOffset to that value.
 		TypeInfo_Interface typeInterface = cast(TypeInfo_Interface)ti;
-		// TODO: This should be optimized.
-		// The current implementation is rather horrendously slow I'd imagine.
-		// Can just cache it.
-		// I'm sure there's a more proper way to do this though.
 		for(ClassInfo curr = ci; curr; curr = curr.base) {
 			foreach(inter; curr.interfaces) {
 				if(inter.classinfo == typeInterface.info) {
@@ -1141,7 +1143,7 @@ private Variant getFieldValue(InstanceType, size_t fieldIndex)(ValueMetadata met
 }
 
 private void setFieldValue(InstanceType, size_t fieldIndex)(ValueMetadata metadata, Variant instanceWrapper, Variant valueWrapper) {
-	// TODO: Same as for getFieldValue. Remove fieldIndex tempalte param.
+	// TODO: Same as for getFieldValue. Remove fieldIndex template param.
 	//size_t fieldIndex = metadata.fieldData.index;
 	InstanceType* instance = instanceWrapper.get!(InstanceType*);
 	instance.tupleof[fieldIndex] = valueWrapper.get!(typeof(instance.tupleof[fieldIndex]));
@@ -1318,6 +1320,14 @@ version(unittest) {
 		}
 	}
 
+	class ReflectionUdaTest {
+		@ReflectionTestAttribute(3) int val;
+
+		@(6) @property int valProp() const {
+			return val;
+		}
+	}
+
 	enum ReflectionTestEnum {
 		a, b, c
 	}
@@ -1371,10 +1381,31 @@ version(unittest) {
 		ValueMetadata val = metadata.findValue("val");
 		assert(val != MethodMetadata.init);
 		assert(val.getValue(instance) == 3);
+		auto newInst = metadata.createInstance(200).get!ReflectionTestClass;
+		assert(newInst.val == 200);
+	}
+
+	// Interface tests:
+	unittest {
+		TypeMetadata metadata = createMetadata!ReflectionTestInterface;
+		ReflectionTestInterface instance = new ReflectionTestClass(10);
+		auto val = metadata.findValue("val");
+		assert(val.getValue(instance) == 10);
+		auto clsMeta = createMetadata!ReflectionTestClass;
+		assert(clsMeta.interfaces.length == 1);
+		assert(clsMeta.interfaces[0] == typeid(ReflectionTestInterface));
+		auto derived = new ReflectionDerivedClass();
+		// TODO: Implement this!
+		// Right now it calls ReflectionTestClass' implementation instead of ReflectionDerivedClass.
+		//assert(val.getValue(derived) == 6);
 	}
 
 	// UDA tests
 	unittest {
+		auto metadata = createMetadata!ReflectionUdaTest;
+		auto field = metadata.findValue("val");
+		assert(field != ValueMetadata.init);
+		assert(field.attributes.length == 1);
 		/+Symbol getterSymbol = prop.propertyData.getter;
 		assert(getterSymbol.hasAttribute(typeid(ReflectionTestAttribute)));
 		assert(getterSymbol.findAttribute!ReflectionTestAttribute == ReflectionTestAttribute(6));+/
