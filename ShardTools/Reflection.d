@@ -1,5 +1,5 @@
 module ShardTools.Reflection;
-version=logreflect;
+//version=logreflect;
 import ShardTools.ExceptionTools;
 import std.range;
 import std.variant;
@@ -16,6 +16,7 @@ import core.stdc.string;
 import std.exception;
 import std.string;
 import std.math;
+import std.functional;
 
 /// Indicates the protection level of a symbol, such as private or public.
 enum ProtectionLevel {
@@ -105,7 +106,7 @@ struct Symbol {
 	T findAttribute(T)(lazy T defaultValue = T.init) {
 		foreach(ref attrib; retro(_attributes)) {
 			if(attrib.type == typeid(T))
-				return cast(T)attrib.value;
+				return attrib.get!T;
 		}
 		return defaultValue();
 	}
@@ -1323,10 +1324,23 @@ version(unittest) {
 	class ReflectionUdaTest {
 		@ReflectionTestAttribute(3) int val;
 
+		// TODO: This results in errors in std.traits.DefaultValueTuple when getting parameters for check.
+		//@CheckerAttribute!(c)() int checkedVal;
+
 		@(6) @property int valProp() const {
 			return val;
 		}
 	}
+
+	/+bool c(int val) {
+		return val > 3;
+	}
+
+	struct CheckerAttribute(alias fun) { 
+		bool check(int args) {
+			return unaryFun!fun(args);
+		}
+	}+/
 
 	enum ReflectionTestEnum {
 		a, b, c
@@ -1406,8 +1420,19 @@ version(unittest) {
 		auto field = metadata.findValue("val");
 		assert(field != ValueMetadata.init);
 		assert(field.attributes.length == 1);
-		/+Symbol getterSymbol = prop.propertyData.getter;
-		assert(getterSymbol.hasAttribute(typeid(ReflectionTestAttribute)));
-		assert(getterSymbol.findAttribute!ReflectionTestAttribute == ReflectionTestAttribute(6));+/
+		assert(field.hasAttribute(typeid(ReflectionTestAttribute)));
+		auto attr = field.findAttribute!ReflectionTestAttribute;
+		assert(attr == ReflectionTestAttribute(3));
+		auto prop = metadata.findValue("valProp");
+		Symbol getterSymbol = prop.propertyData.getter;
+		assert(getterSymbol.hasAttribute(typeid(int)));
+		assert(getterSymbol.findAttribute!int == 6);
+		/+auto checker = metadata.findValue("checkedVal").attributes[0];
+		auto t = __traits(getAttributes, ReflectionUdaTest.checkedVal)[0];
+		writeln(t.check(3));
+		writeln("metadata = ", checker);
+		writeln("type = ", checker.type);
+		auto checkerData = checker.type.metadata;
+		assert(checkerData.invokeMethod("check", checker, 4).get!bool);+/
 	}
 }
