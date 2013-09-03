@@ -1,6 +1,9 @@
-﻿/// Provides simple operations that act upon collections with foreach, as opposed to ranges.
+﻿/// $(RED This module should be considered deprecated and not be used in new code.)
+/// Provides simple operations that act upon collections with foreach, as opposed to ranges.
 /// The operations that mimic std.algorithm are intended to be faster, as they allow use of array foreach, which is the fastest form of iteration.
 /// This module is stable in design, but not tested enough to be stable in implementation. Many methods are completely untested.
+/// There was a time when this module could have been considered useful and a performance booster, but that is no longer the case.
+/// New code should use std.algorithm instead of this module.
 module ShardTools.ArrayOps;
 private import std.traits;
 import std.parallelism;

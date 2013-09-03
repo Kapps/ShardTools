@@ -1,3 +1,4 @@
+/// $(RED This module is not yet implemented.)
 module ShardTools.Property;
 import std.traits;
 

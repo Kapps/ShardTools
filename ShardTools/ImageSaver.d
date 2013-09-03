@@ -31,8 +31,8 @@
 * of this file under the terms of either the MPL or the GPL.
 *
 * ***** END LICENSE BLOCK ***** */
-// LICENSE NOTE:
-// The above license is due to the savePNG function. If you replace the function, the license will not apply.
+/// $(Red License Note)
+/// This module is licensed under the MPL license due to the savePng method.
 module ShardTools.ImageSaver;
 
 import ShardTools.Color;
@@ -54,6 +54,11 @@ public:
 
 	// This function is taken from CyberShadow's ae library, from the Image class.
 	// The Image class is licensed MPL, thus this file is as well.		
+	/// Saves an array of colours to a file with the specified width and height.
+	/// $(RED License):
+	/// 	This method was taken from Vladimir Panteleev's ae library and slightly changed to use ShardTools.Color.
+	/// 	All credits go to Vladimir Panteleev (CyberShadow).
+	/// 	The license for this function is MPL.
 	static void savePNG(string filename, Color[] pixels, int w, int h) {	
 		string Dir = PathTools.GetDirectoryPath(filename);	
 		if(!exists(Dir))

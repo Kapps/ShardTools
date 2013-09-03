@@ -1,5 +1,5 @@
 ﻿/// Provides a simple array-list implementation.
-/// This module should be considered deprecated.
+/// $(RED This module should be considered deprecated.)
 module ShardTools.List;
 private import ShardTools.IList;
 import std.conv;

@@ -4,7 +4,7 @@ import ShardTools.ICollection;
 // TODO: Phase this out and remove it.
 
 /// The base interface for a collection accessible by index.
-/// This interface should be considered deprecated and no longer used in new code, but will remain for now.
+/// $(RED This interface should be considered deprecated and no longer used in new code.)
 /// Params:
 /// 	T = The type of the elements in this list.
 interface IList(T) : ICollection!T {

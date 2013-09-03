@@ -15,6 +15,7 @@ mixin(MakeException("InvalidCastException", "The type stored in Untyped did not 
 /// For classes, a cast will be attempted.
 /// Untyped will allocate GC memory for structs that are greater than the size of a void pointer.
 /// Otherwise, Untyped will allocate only if typeid allocates or if an exception is thrown.
+/// $(RED The implementation of this struct is still extremely poor; use with caution.)
 struct Untyped {	
 
 	this(T)(T Value) {

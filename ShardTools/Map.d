@@ -3,6 +3,8 @@
 private import std.string;
 
 /// A dictionary class used to lookup an element by key.
+/// For the moment, this class is merely a wrapper around an associative array.
+/// In the future, it should support custom hash functions and equality comparisons.
 class Map(Key, Value) {
 
 public:
@@ -52,8 +54,8 @@ public:
 	/// 	Key = The key to remove from this map.
 	/// Returns:
 	///		Whether the key was removed.
-	void Remove(Key Key) {
-		Elements.remove(Key);
+	bool Remove(Key Key) {
+		return Elements.remove(Key);
 	}
 
 	/// Gets the values contained in this collection.
@@ -90,6 +92,7 @@ public:
 
 	/// Removes all of the elements in this collection.
 	void Clear() {
+		// TODO: Just create a new AA instead?
 		Key[] Keys = this.Keys();
 		foreach(Key; Keys)
 			Remove(Key);

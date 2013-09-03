@@ -6,6 +6,7 @@ import ShardTools.ExceptionTools;
 mixin(MakeException("ObjectDisposedException", "The object attempted to be accessed was already disposed."));
 
 /// An interface used to handle disposing of an asset, including tracking of whether it is disposed.
+/// $(RED This module should be considered deprecated, as it provides no real benefits over a destructor.)
 interface IDisposable {
 	
 	/// Disposes of this object, provided it has not already been disposed.

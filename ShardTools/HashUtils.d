@@ -1,3 +1,4 @@
+/// Provides a variety of hash algorithms to use on data.
 module ShardTools.HashUtils;
 
 static if(size_t.sizeof == 4) {

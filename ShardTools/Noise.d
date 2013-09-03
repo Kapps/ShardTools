@@ -7,6 +7,7 @@ private import std.array;
 // TODO: This class just seems flat out wrong for a lot of things?
 
 /// Provides generators for creating random noise, such as perlin noise.
+/// $(RED The implementation of this class is poor, and thus is disabled until improved.)
 @disable static class Noise  {
 	
 public:	

@@ -54,13 +54,12 @@ class Event(RetValue, Params...) {
 		// Fun! Turns out, doing this is actually creating a huge amount of garbage.
 		// So... we are going to use a whole lot of manual memory management and hacks.
 		// This could all be solved by a thread-safe singly linked list... but that's more complicated and may not solve the issue really.
+		// TODO: Eliminate this. It was a stupid attempt at solving a problem that doesn't really exist.
 		CallbackType[] Pointers;
 		Buffer PointerBuffer = BufferPool.Global.Acquire(this.Callbacks.Count * CallbackType.sizeof);
-		//GC.disable(); // Because our buffers are not scanned for pointers, we disable the garbage collector until we do the callback...
-		scope(exit) { 
+		scope(exit)
 			BufferPool.Global.Release(PointerBuffer);
-			//GC.enable();
-		}
+
 		synchronized(this) {			
 			foreach(ref CallbackType Callback; this.Callbacks)
 				PointerBuffer.Write(Callback);

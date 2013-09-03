@@ -1,3 +1,6 @@
+/// Provides basic, global, logging capabilities.
+/// While this module is not deprecated, it is likely to be deprecated once Phobos gets logging.
+/// The interface for this module is rather poor and not flexible.
 module ShardTools.Logger;
 
 private import std.conv;

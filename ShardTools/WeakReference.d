@@ -16,8 +16,8 @@ private extern (C) void rt_detachDisposeEvent(Object h, DEvent e);
 
 /// Provides a weak reference to a single object.
 /// BUGS:
-///		This class is largely untested.
-class WeakReference(T) {
+///		This class is completely untested. I honestly have no clue if it even works.
+@disable class WeakReference(T) {
 
 public:
 	// Xor value to point outside GC memory.

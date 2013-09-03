@@ -1,4 +1,10 @@
-﻿module ShardTools.Problem;
+﻿/// Provides a means of handling and tracking problems that occur in an application.
+/// Problems may have one or more steps taken to attempt to solve them.
+/// Solutions can describe the approaches used to solve a problem.
+/// Watchers may be used to keep track of problems that occur.
+/// Problems can depend on other problems, and thus be chained.
+/// This module is not yet implemented.
+module ShardTools.Problem;
 private import std.algorithm;
 private import std.range;
 private import ShardTools.ArrayOps;

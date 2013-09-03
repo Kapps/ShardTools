@@ -7,6 +7,7 @@ import std.stdio : writefln;
 public import ShardTools.TimeSpan;
 
 /// A class used to provide high-precision cross-platform timing access.
+/// $(RED With the existence of std.datetime.StopWatch, this class should be considered deprecated.)
 class Timer {
 	
 	/// Initializes a new instance of the Timer object.

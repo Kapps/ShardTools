@@ -5,6 +5,7 @@ private import std.container;
 
 
 /// A helper class used to keep a reference to a desired object, ensuring the garbage collector knows about it while it gets passed into non-GC code.
+/// $(RED This class should be considered deprecated; consider using GC.addRoot instead.)
 class NativeReference  {
 	
 	public static:

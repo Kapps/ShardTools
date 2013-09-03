@@ -22,6 +22,7 @@ import ShardTools.Untyped;
 /// Because synchronous operations return only a value, errors would be silently ignored if the default value is returned.
 /// As a result, the synchronous API will throw an ActionAbortedException (the same as GetResultSynchronous on an asynchronous action) if the operation failed.
 /// All operations in this class are thread-safe.
+/// $(RED This class is not yet implemented.)
 @disable shared class MemoryCache {
 
 public:

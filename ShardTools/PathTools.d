@@ -46,7 +46,10 @@ version(Windows) {
 	enum string DirSeparator = "/";
 }
 
-/// Static helper class used to manage paths.
+/// Static helper class used to manage paths consistently across platforms.
+/// This class comes from a time before the new std.path in Phobos.
+/// New code generally won't have to use this class for most operations.
+/// However it does provide utilities that std.path may not, and results may differ.
 static class PathTools {
 public:	
 	

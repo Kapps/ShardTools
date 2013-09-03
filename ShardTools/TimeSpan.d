@@ -7,7 +7,7 @@ import std.stdio;
 // TODO: Now that dur and such are in, phase this out?
 
 /// A struct used to represent a period of time.
-/// New code should consider using the std.datetime.Duration or core.time.TickDuration structs instead.
+/// $(RED This struct is deprecated; new code should use std.datetime.Duration or core.time.TickDuration.)
 struct TimeSpan {
 
 public:	

@@ -6,6 +6,7 @@ private import std.path;
 private import std.conv;
 
 /// A basic implementation of the Logger class to log messages to a file.
+/// The current implementation is naive and will perform an IO operation on each log.
 class FileLogger : Logger {
 public:
 	
@@ -20,6 +21,8 @@ protected:
 	/// Throws:
 	///		FileException = Raised if there was an error writing to the file.
 	override void PerformLog(in char[] LogName, in char[] Message) {	
+		// TODO: Keep the file open or else perform logs differently.
+		// This is a horrible solution, opening a file on each log...
 		string ActualName = to!string(LogName.dup);
 		if(extension(ActualName) is null)
 			ActualName = setExtension(ActualName, "txt");

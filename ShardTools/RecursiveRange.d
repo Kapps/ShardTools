@@ -7,6 +7,7 @@ import std.algorithm;
 
 /// Lazily converts a recursive range into an array of ranges with the index being the depth.
 /// For example, a QuadTree would have a single node for depth 0, four nodes in the array for depth one, sixteen for depth two, etc.
+/// This module is not yet implemented.
 /// Params:
 ///		fun = The function to return the next range for an element in the range. Should return an empty range if this element did not contain any children.
 ///		Range = The type of the input ranges. Currently, all recursed ranges must be of this type.

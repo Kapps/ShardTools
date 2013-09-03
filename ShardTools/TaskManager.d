@@ -30,6 +30,7 @@ mixin(MakeException("PoolDestroyedException", "Unable to place new tasks into a 
 /// Provides a collection of threads which can execute tasks (AsyncActions) across multiple threads.
 /// The number of threads used can be dynamically altered, and threads will be created or destroyed automatically as required.
 /// Unlike the TaskPool, the TaskManager has the capability to prioritize certain tasks, and the capability to pause or resume tasks using Fibers.
+/// $(RED This class is not yet implemented.)
 @disable final class TaskManager  {
 	
 public:

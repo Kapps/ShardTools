@@ -1,6 +1,6 @@
 ﻿module ShardTools.AsyncAction;
-private import core.atomic;import ShardTools.Untyped;
-
+private import core.atomic;
+import ShardTools.Untyped;
 private import std.functional;
 private import std.range;
 private import std.stdio;

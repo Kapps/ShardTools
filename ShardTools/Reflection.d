@@ -1,3 +1,50 @@
+/// Provides runtime reflection data for D symbols, such as classes or modules.
+/// All reflection data is generated at compile-time, and thus metadata must be specified first.
+/// Once a symbol has metadata generated for it, any symbols it can access will have a lazy
+/// loader set to generate metadata for those symbols.
+/// For example, a method returning an instance of Foo will result in a lazy loader
+/// being created to generate metadata for Foo.
+/**
+	Example:
+	---
+	class Foo {
+		int _val;
+		this(int val) {
+			this._val = val;
+		}
+
+		@property int val() const {
+			return _val;
+		}
+
+		@property void val(int value) {
+			_val = value;
+		}
+
+		int getSquare(int input) {
+			return input * input;
+		}
+	}
+
+	// First, we need to generate metadata for Foo.
+	auto metadata = createMetadata!Foo;
+	// Then we can create an instance.
+	// Note that creating an instance returns a Variant, so the result must be converted.
+	Variant varInstance = metadata.createInstance(3);
+	Foo instance = varInstance.get!Foo;
+	// Can easily get any property or field through getValue.
+	assert(metadata.getValue("val", instance) == 3);
+	// Since the type may not be known at compile-time, we can also operate on the Variant directly.
+	// Note that in this scenario the metadata will have to be created through createMetadata prior to this.
+	// We created it above with createMetadata!Foo, so we're fine.
+	assert(metadata == varInstance.metadata);
+	assert(metadata.getValue("val", varInstance) == 3);
+	// Of course, can set values and invoke methods as well.
+	metadata.setValue("val", instance, 6);
+	assert(metadata.getValue("val", instance) == 6);
+	assert(metadata.invokeMethod("getSquare", instance, 4) == 16);
+	---
+*/
 module ShardTools.Reflection;
 version=logreflect;
 import ShardTools.ExceptionTools;
@@ -686,8 +733,8 @@ ValueMetadata findValue(T)(T instance, string name) {
 /// At the moment this is flawed and only returns parameters that exactly match the given type.
 /// Variadic arguments are not yet supported either.
 /// If no method with that name and set of arguments exists, init is returned.
-MethodMetadata findMethod(T)(T instance, string methodName, TypeInfo[] paramTypes...) if(is(T == TypeMetadata) || is(T == ModuleMetadata)) {
-	return findMethodInternal(instance.children._methods, methodName, paramTypes);
+MethodMetadata findMethod(T)(T metadata, string methodName, TypeInfo[] paramTypes...) if(is(T == TypeMetadata) || is(T == ModuleMetadata)) {
+	return findMethodInternal(metadata.children._methods, methodName, paramTypes);
 }
 
 private MethodMetadata findMethodInternal(MethodMetadata[] methods, string methodName, TypeInfo[] paramTypes...) {
@@ -724,8 +771,25 @@ Variant invokeMethod(T, InstanceType, ArgTypes...)(T metadata, string methodName
 	TypeInfo[] paramTypes = templateArgsToTypeInfo!ArgTypes;
 	MethodMetadata method = findMethod(metadata, methodName, paramTypes);
 	if(method == MethodMetadata.init)
-		throw new ReflectionException("Unable to find a method that can be invoked with these arguments.");
+		throw new ReflectionException("Unable to find a method named " ~ methodName ~ " within " ~ metadata.name ~ " that can be invoked with these arguments.");
 	return method.invoke(instance, args);
+}
+
+/// A shortcut to get or set the first value with the given name.
+/// If no value exists with the given name on the specified metadata, a ReflectionException is thrown.
+Variant getValue(T, InstanceType)(T metadata, string valueName, InstanceType instance) {
+	ValueMetadata value = metadata.findValue(valueName);
+	if(value == ValueMetadata.init)
+		throw new ReflectionException("Unable to find a value named " ~ valueName ~ " within " ~ metadata.name ~ ".");
+	return value.getValue(instance);
+}
+
+/// ditto
+void setValue(T, InstanceType, ValueType)(T metadata, string valueName, InstanceType instance, ValueType value) {
+	ValueMetadata valueData = metadata.findValue(valueName);
+	if(valueData == ValueMetadata.init)
+		throw new ReflectionException("Unable to find a value named " ~ valueName ~ " within " ~ metadata.name ~ ".");
+	valueData.setValue(instance, value);
 }
 
 /// Creates a new instance of a type given metadata and arguments to pass in to the constructor.
@@ -1416,5 +1480,46 @@ version(unittest) {
 		writeln("type = ", checker.type);
 		auto checkerData = checker.type.metadata;
 		assert(checkerData.invokeMethod("check", checker, 4).get!bool);+/
+	}
+
+	// Test module header example.
+	// Would be nice if documented unittests worked on module headers...
+	unittest {
+		class Foo {
+			int _val;
+			this(int val) {
+				this._val = val;
+			}
+			
+			@property int val() const {
+				return _val;
+			}
+			
+			@property void val(int value) {
+				_val = value;
+			}
+			
+			int getSquare(int input) {
+				return input * input;
+			}
+		}
+		
+		// First, we need to generate metadata for Foo.
+		auto metadata = createMetadata!Foo;
+		// Then we can create an instance.
+		// Note that creating an instance returns a Variant, so the result must be converted.
+		Variant varInstance = metadata.createInstance(3);
+		Foo instance = varInstance.get!Foo;
+		// Can easily get any property or field through getValue.
+		assert(metadata.getValue("val", instance) == 3);
+		// Since the type may not be known at compile-time, we can also operate on the Variant directly.
+		// Note that in this scenario the metadata will have to be created through createMetadata prior to this.
+		// We created it above with createMetadata!Foo, so we're fine.
+		assert(metadata == varInstance.metadata);
+		assert(metadata.getValue("val", varInstance) == 3);
+		// Of course, can set values and invoke methods as well.
+		metadata.setValue("val", instance, 6);
+		assert(metadata.getValue("val", instance) == 6);
+		assert(metadata.invokeMethod("getSquare", instance, 4) == 16);
 	}
 }

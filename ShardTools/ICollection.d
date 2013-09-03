@@ -7,6 +7,7 @@ import std.exception;
 // Also, really, the point of this was to not need index, yet there's a Set.
 
 /// An interface for a mutable collection accessible by index.
+/// $(RED This module comes from a time of less familiarity with D, and should be considered deprecated.)
 interface ICollection(T) {
 
 	/// Gets the number of elements in this collection.

@@ -1,3 +1,5 @@
+/// Provides methods for performing fast yet unsafe string operations.
+/// $(RED This module is likely not needed with std.ascii existing, and should be considered deprecated.)
 module ShardTools.StringTools;
 
 import std.conv;

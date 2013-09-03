@@ -4,7 +4,7 @@ import std.zlib;
 import std.c.stdlib;
 import std.c.string;
 
-/// A class used to compress data.
+/// A class used to compress data in various formats.
 public class Compressor  {
 
 public:
@@ -40,7 +40,7 @@ public:
 	/// 	OriginalLength = The length of the original data.
 	/// BUGS:
 	///		This may or may not work properly for all devices.
-	/// 	The Android Browser does not seem to like things compressed with this method, so there is likely a glitch somewhere.
+	/// 	The Android Browser does not seem to like things compressed with this method, so there is likely a bug somewhere.
 	static void[] DeflateToGzip(void[] Data, const void[] Original) {
 		return ToGzipInternal(Data, Original.length, std.zlib.crc32(0, Original));
 	}

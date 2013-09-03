@@ -1,4 +1,5 @@
-﻿module ShardTools.AsyncTask;
+﻿/// $(RED This module is not yet implemented, and may be completely redone.)
+module ShardTools.AsyncTask;
 public import ShardTools.AsyncAction;
 
 // TODO: Scrap this and start over.

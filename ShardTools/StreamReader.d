@@ -1,4 +1,4 @@
-﻿/// Scheduled to be deprecated upon completion of StreamOutput.
+﻿/// $(RED Scheduled to be deprecated upon completion of StreamOutput.)
 module ShardTools.StreamReader;
 private import std.exception;
 import core.stdc.string;

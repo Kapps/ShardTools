@@ -6,6 +6,7 @@ import std.array;
 // Current one is far from ideal.
 
 /// Represents a list sorted by an integer key.
+/// $(RED The implementation for this class is poor, and the class may be deprecated in the future.)
 class SortedList(T) {
 	
 	/// Initializes a new instance of the SortedList class.

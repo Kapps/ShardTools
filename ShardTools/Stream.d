@@ -1,4 +1,5 @@
-﻿module ShardTools.Stream;
+﻿/// $(RED This module has been largely replaced by DataSources.)
+module ShardTools.Stream;
 
 version(None) {
 private import std.traits;

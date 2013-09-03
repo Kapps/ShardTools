@@ -4,6 +4,7 @@ public import ShardTools.IDisposable;
 // TODO: Not sure if this should exist. Consider phasing out.
 
 /// An abstract class providing a basic implementation of the IDisposable interface.
+/// $(RED This module should be considered deprecated, as it provides no real benefits over destructors.)
 abstract class Disposable : IDisposable {
 	
 	/// Gets a value whether this object is currently disposed.
