@@ -1,22 +1,16 @@
 module ShardTools.Reflection;
-//version=logreflect;
+version=logreflect;
 import ShardTools.ExceptionTools;
 import std.range;
 import std.variant;
 import std.traits;
 import std.algorithm;
-import std.array;
 import std.typetuple;
 import std.conv;
 version(logreflect) import std.stdio;
-import core.stdc.stdlib;
-import std.typecons;
-import core.memory;
 import core.stdc.string;
+import core.memory;
 import std.exception;
-import std.string;
-import std.math;
-import std.functional;
 
 /// Indicates the protection level of a symbol, such as private or public.
 enum ProtectionLevel {
@@ -350,11 +344,6 @@ struct MethodMetadata {
 	/// If the method can not be invoked with the given arguments, an exception is thrown.
 	/// In the case of static methods, instance may be null; otherwise instance must not be null.
 	/// For static methods the value of instance is ignored.
-	/// Bugs:
-	/// 	Invoking a method from an Interface's metadata on a type that derives from the type that implements the interface and overrides the
-	/// 	implemented method will result in the base implementation being called instead of the overridden method.
-	/// 	For example, if Bar implements foo on Foo, and DerivedBar inherits Bar, calling invoke on metadata from Foo
-	/// 	and passing in an instance of DerivedBar will call Bar's implementation of foo instead of DerivedBar's.
 	Variant invoke(InstanceType, T...)(InstanceType instance, T arguments) {
 		// TODO: Check if pure, non-static, and struct. If so, throw because not passed by ref.
 		// Maybe make version(logreflect) log it.
@@ -507,7 +496,9 @@ struct ValueMetadata {
 	}
 
 	string toString() {
-		return format("%s %s %s%s", kind == DataKind.constant ? "enum" : symbol.protection.text[0..$-1], type.text, symbol.name, kind == DataKind.property ? "()" : "");
+		string result = (kind == DataKind.constant ? "enum" : symbol.protection.text[0..$-1])
+			~ " " ~ type.text ~ " " ~ symbol.name ~ (kind == DataKind.property ? "()" : "");
+		return result;
 	}
 
 private:
@@ -706,6 +697,11 @@ private MethodMetadata findMethodInternal(MethodMetadata[] methods, string metho
 			if(data.parameters.length != paramTypes.length)
 				continue;
 			bool falseParam = false;
+			// TODO: Use _d_istypeof2 and/or _d_dynamic_cast to do this.
+			// That way it can handle things like this for us.
+			// Or else Variant.implicitConversionTargets.
+			// Just use something to not have to force exact types.
+			// Also fix qualified parameters (const, etc).
 			foreach(i, param; data.parameters) {
 				if(param.type != paramTypes[i]) {
 					falseParam = true;
@@ -744,7 +740,7 @@ Variant createInstance(ArgTypes...)(TypeMetadata metadata, ArgTypes args) {
 		// TODO: Accessing m_init for some structs causes a segfault.
 		// Figure out a work-around, or else fix this.
 		// Until then, can't support structs.
-		throw new NotImplementedError("createInstance with structs");
+		throw new NotSupportedException("Calling createInstance with a struct is not yet implemented.");
 		//ubyte[] data = new ubyte[metada.instanceSize];
 
 	} else {
@@ -1079,44 +1075,32 @@ private void* getVirtualFunctionPointer(MethodParentKind parentType)(void* insta
 		thisOffset = 0;
 		return ci.vtbl[vtblSlot];
 	} else static if(parentType == MethodParentKind.interface_) {
-		// For interfaces this is a fair bit more complex.
+		// For interfaces this is a bit more complex.
 		// First, we have to find the right instance of Interface which stores the vtbl for that ClassInfo.
 		// That instance may not be on the ClassInfo that instance is, but rather a base class.
 		// When we find it, we can get a pointer to that class' implementation using the same approach as for classes.
 		// Aka, vtblSlot within the object.Interface instance's vtbl.
 		// Unfortunately this won't handle overrides.
+		// To handle overrides, we get the offset of the interface, and the void*** there is a pointer to our vtbl.
 		// Also, interface context pointers are actually offset by the object.Interface.offset value.
 		// So we have to handle that as well, and set thisOffset to that value.
+
+		// TODO: We can optimize this easily.
+		// Ultimately, we're only trying to find the Interface instance to get it's offset.
+		// But if the object we're invoking the method on is an interface reference,
+		// we can get the offset through that. At least, I assume we can. 
+		// Not sure how Foo (Interface) -> Bar : Foo -> DerivedBar : Bar -> DerivedDerived : Foo, DerivedBar would work.
+		// Really though, the cost should be negligible compared to the performance hit of using Variants and such.
 		TypeInfo_Interface typeInterface = cast(TypeInfo_Interface)ti;
 		for(ClassInfo curr = ci; curr; curr = curr.base) {
 			foreach(inter; curr.interfaces) {
 				if(inter.classinfo == typeInterface.info) {
-					enforce(inter.vtbl.length > vtblSlot);
-					auto interPtr = inter.vtbl[vtblSlot];
-					if(curr == ci) {
-						// The type of instance implements the interface, so we can use it's instance vptr directly.
-						thisOffset = inter.offset;
-						return interPtr;
-					} else {
-						// TODO: This approach is actually wrong.
-						// Not sure what the correct approach is though...
-						// Need to somehow find the function in the type's vtbl, but no clue how to do that.
-						throw new NotImplementedError("Calling functions from interface metadata on an instance which derives from the type that implements the interface is not yet supported.");
-						// Otherwise, find the vtbl index.
-						/+writeln("Trying to figure out vtbl slot for ", interPtr, ".");
-						foreach(i, ptr; curr.vtbl) {
-							writeln(ptr, " = ", ptr - inter.offset, " = ", ptr + inter.offset);
-							if(ptr == interPtr - inter.offset) {
-								writeln("Found match at ", i);
-								size_t derivedVtblSlot = i;
-								enforce(ci.vtbl.length > derivedVtblSlot);
-								return ci.vtbl[derivedVtblSlot];
-							}
-						}
-						// If not found, then not virtual and so can call directly.
-						thisOffset = inter.offset;
-						return interPtr;+/
-					}
+					void*** vtblPtr = cast(void***)(instance + inter.offset);
+					vtbl = (*vtblPtr)[0..inter.vtbl.length];
+					enforce(vtbl.length > vtblSlot);
+					auto interPtr = vtbl[vtblSlot];
+					thisOffset = inter.offset;
+					return interPtr;
 				}
 			}
 		}
@@ -1409,9 +1393,7 @@ version(unittest) {
 		assert(clsMeta.interfaces.length == 1);
 		assert(clsMeta.interfaces[0] == typeid(ReflectionTestInterface));
 		auto derived = new ReflectionDerivedClass();
-		// TODO: Implement this!
-		// Right now it calls ReflectionTestClass' implementation instead of ReflectionDerivedClass.
-		//assert(val.getValue(derived) == 6);
+		assert(val.getValue(derived) == 6);
 	}
 
 	// UDA tests

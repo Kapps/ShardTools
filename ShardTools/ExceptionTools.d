@@ -1,5 +1,4 @@
 module ShardTools.ExceptionTools;
-import std.exception;
 
 mixin(MakeException("InvalidOperationException", "The performed operation was considered invalid for the present state."));
 mixin(MakeException("NotSupportedException", "The operation being performed was not supported."));
