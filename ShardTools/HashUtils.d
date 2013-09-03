@@ -12,7 +12,7 @@ static if(size_t.sizeof == 4) {
 }
 
 /// Calculates an FNV-1A hash from the given data.
-/// This is a general purpose hash that's fast to calculate, has low collision rates, and has high dispersion even among similar data.
+/// This is a general purpose hash that's fast to calculate, has low collision rates, and has high dispersion even amongst similar data.
 /// This hash is not cryptographically secure, and is easy to brute force or guess a collision for.
 /// For more information about the FNV hash, see http://www.isthe.com/chongo/tech/comp/fnv/index.html.
 hash_t fnvHash(ubyte[] data) {

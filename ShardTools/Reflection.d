@@ -93,7 +93,6 @@ alias void function(ValueMetadata metadata, Variant instance, Variant value) Dat
 alias Variant function(MethodMetadata, void*, Variant[] args) MethodInvokeFunction;
 
 mixin(MakeException("ReflectionException"));
-mixin(MakeException("InvalidParameterException", "The arguments passed in to invoke a method were invalid."));
 
 // TODO: Make all metadata immutable (except for invoke of course).
 // This includes symbols.
@@ -387,6 +386,12 @@ struct MethodMetadata {
 		return _parameters;
 	}
 
+	/// Finds the parameter within this method that has the given name, or init if not found.
+	ParameterMetadata findParameter(string name) {
+		ptrdiff_t index = _parameters.countUntil!"a.name == b"(name);
+		return index == -1 ? ParameterMetadata.init : _parameters[index];
+	}
+
 	/// Invokes this method with the given arguments.
 	/// If the method can not be invoked with the given arguments, an exception is thrown.
 	/// In the case of static methods, instance may be null; otherwise instance must not be null.
@@ -408,9 +413,32 @@ struct MethodMetadata {
 			args[i] = arg;
 		// If it's a class, the context pointer should be the reference.
 		// Otherwise if it's a struct, a pointer to the struct.
-		static if(is(InstanceType == struct))
-			void* contextPtr = cast(void*)instancePtr;
-		else static if(is(InstanceType == interface)) {
+		static if(is(InstanceType == struct)) {
+			static if(isVariant!InstanceType) {
+				enum storeIndex = fieldIndex!(InstanceType, "store");
+				void* contextPtr;
+				ClassInfo ci = cast(ClassInfo)instancePtr.type;
+				if(cast(ClassInfo)instancePtr.type)
+					contextPtr = cast(void*)instancePtr.coerce!Object;
+				else if(cast(TypeInfo_Interface)instancePtr.type) {
+					// We need a way to get the pointer to the value stored within the Variant.
+					// We can't just coerce to void* or Object, and we don't know the Interface type.
+					// So we do the only reasonable thing and access the private store backing and hack around it.
+					auto contents = instancePtr.tupleof[storeIndex][];
+					void* interPtr = *cast(void**)contents.ptr;
+					Interface* inter = **cast(Interface***)interPtr;
+					contextPtr = interPtr - inter.offset;
+				} else {
+					if(instancePtr.type.tsize > instancePtr.size) {
+						auto contents = instancePtr.tupleof[storeIndex][];
+						contextPtr = *cast(void**)contents.ptr;
+					} else
+						contextPtr = cast(void*)instancePtr;
+				}
+			} else {
+				void* contextPtr = cast(void*)instancePtr;
+			}
+		} else static if(is(InstanceType == interface)) {
 			// If it's an interface, casting to void* is offset by the instance's offset value.
 			void* contextPtr = cast(void*)cast(Object)*instancePtr;
 		} else
@@ -527,19 +555,27 @@ struct ValueMetadata {
 		// TODO: Need to so support checking for static.
 		//if(is(InstanceType == struct) && !isStatic)
 		//	throw new InvalidOperationException("A struct was passed by value to setValue to a non-static method, causing the operation to have no effect."); 
-		enforceCanSet();
-		return _setter(this, Variant(&instance), Variant(value));
+		enforceCanSet(instance);
+		_setter(this, Variant(&instance), Variant(value));
 	}
 
 	/// ditto
 	void setValue(InstanceType, ValueType)(ref InstanceType instance, ValueType value) if(is(InstanceType == struct)) {
-		enforceCanSet();
-		return _setter(this, Variant(&instance), Variant(value));
+		enforceCanSet(instance);
+		_setter(this, Variant(&instance), Variant(value));
 	}
 
-	private void enforceCanSet() {
+	private void enforceCanSet(InstanceType)(ref InstanceType instance) {
 		if(!canSet)
 			throw new NotSupportedException("Attempted to set a value on a member that did not support it.");
+		static if(is(InstanceType == Variant)) {
+			// This isn't really possible.
+			// While yes, we could make it work in this some cases (adjusting values on a Variant),
+			// this would lead to things like getValue(instance).setValue("bar", 3) and expecting instance.bar to be changed.
+			// In reality, a copy of instance.bar would be changed instead.
+			if(cast(TypeInfo_Struct)instance.type)
+				throw new NotSupportedException("Unable to set a value on a struct contained by a Variant as it would operate on a copy.");
+		}
 	}
 
 	string toString() {
@@ -563,10 +599,10 @@ private:
 /// Provides backing information for a field referenced by a ValueMetadata instance.
 struct FieldValueMetadata {
 
-	this(size_t index, size_t offset, TypeInfo type) {
+	this(size_t index, size_t offset, TypeInfo declaringType) {
 		this._index = index;
 		this._offset = offset;
-		this._type = type;
+		this._declaringType = declaringType;
 	}
 
 	/// Gets the index of the field within the type containing it.
@@ -584,14 +620,14 @@ struct FieldValueMetadata {
 	}
 
 	/// Gets the type that declares this field.
-	@property TypeInfo type() {
-		return _type;
+	@property TypeInfo declaringType() {
+		return _declaringType;
 	}
 
 private:
 	size_t _index;
 	size_t _offset;
-	TypeInfo _type;
+	TypeInfo _declaringType;
 }
 
 /// Provides backing information for a property referenced by a ValueMetadata instance.
@@ -629,7 +665,7 @@ struct PropertyValueMetadata {
 /// is not available, reflection data for type T will be returned instead.
 TypeMetadata metadata(T)(T instance) {
 	TypeInfo typeInfo;
-	static if(is(T == Variant)) {
+	static if(isVariant!T) {
 		// TODO: Figure out how to check if an actual variant and not just the alias.
 		//version(logreflect) writeln("Passed in variant, using ", instance.type.text, " instead.");
 		typeInfo = instance.type;
@@ -647,11 +683,11 @@ TypeMetadata metadata(T)(T instance) {
 		TypeMetadata existing = getStoredExisting(typeInfo, false);
 		if(existing != TypeMetadata.init)
 			return existing;
-		static if(!is(T == Variant) && !is(T : TypeInfo)) {
+		static if(!isVariant!T && !is(T : TypeInfo)) {
 			version(logreflect) writeln("No metadata for " ~ typeInfo.text ~ "; creating and returning metadata for " ~ typeid(Unqual!T).text ~ ".");
 			return createMetadata!T();
 		} else {
-			static if(is(T == Variant)) {
+			static if(isVariant!T) {
 				version(logreflect) writeln("Got variant of unknown type " ~ instance.type.text ~ "; returning init.");
 			} else {
 				version(logreflect) writeln("Got TypeInfo of unknown type " ~ typeInfo.text ~ "; returning init.");
@@ -950,11 +986,12 @@ private ValueMetadata getField(T, string m)() {
 		// Unfortunately have to duplicate this, couldn't get getSymbol to work with private fields.
 		// Passing in the symbol causes it to try to be evaluated and has errors with static.
 		string name = m;
-		ProtectionLevel protection = getProtection!T;
+		ProtectionLevel protection = to!ProtectionLevel(__traits(getProtection, __traits(getMember, T, m)) ~ "_");
 		auto unparsedAttribs = __traits(getAttributes, __traits(getMember, T, m));
 		Variant[] attributes = attributeTupleToArray(unparsedAttribs);
 		Symbol symbol = Symbol(name, protection, attributes);
-		FieldValueMetadata fieldData = FieldValueMetadata(index, offset, type);
+		TypeInfo declaringType = typeid(T);
+		FieldValueMetadata fieldData = FieldValueMetadata(index, offset, declaringType);
 		return ValueMetadata(symbol, dataKind, type, getter, setter, fieldData);
 	}
 }
@@ -1293,6 +1330,11 @@ private template isField(alias T) {
 	enum isField = hasField!(__traits(parent, T), __traits(identifier, T));
 }
 
+private template isVariant(T) {
+	// TODO: Need a real way of checking.
+	enum isVariant = is(Unqual!T == Variant);
+}
+
 // hasField (fieldIndex) and hasFieldImpl (fieldIndexImpl) credits to Jacob Carlborg.
 // Simply changed a bit to alias to an index instead so we can use it with tupleof.
 private template fieldIndex(T, string field) {
@@ -1330,6 +1372,28 @@ version(unittest) {
 		}
 	}
 
+	struct ReflectionLargeStructTester {
+		ubyte[16] unusedPadding;
+		ubyte[Variant.size] maxVariantPadding;
+		int _val;
+
+		this(int val) {
+			_val = val;
+		}
+
+		@property int val() const {
+			return _val;
+		}
+
+		@property void val(int val) {
+			_val = val;
+		}
+
+		int returnDouble() const {
+			return val * 2;
+		}
+	}
+
 	struct ReflectionFloatStructTester {
 		int a;
 		float b;
@@ -1340,7 +1404,7 @@ version(unittest) {
 	}
 
 	class ReflectionTestClass : ReflectionTestInterface {
-		int _val = 3;
+		private int _val = 3;
 
 		@property int val() const {
 			return _val;
@@ -1348,6 +1412,15 @@ version(unittest) {
 
 		int foo(int x = 1) {
 			return x;
+		}
+
+		void doubleRef(lazy scope int x) {
+			int tmp = x();
+			tmp *= 2;
+		}
+
+		static int staticMethod() {
+			return 3;
 		}
 
 		this() {
@@ -1360,6 +1433,7 @@ version(unittest) {
 	}
 
 	class ReflectionDerivedClass : ReflectionTestClass {
+		int derivedField;
 		@property override int val() const {
 			return super.val * 2;
 		}
@@ -1367,6 +1441,11 @@ version(unittest) {
 		int bar(int x) {
 			return x * 2;
 		}
+
+		override int foo(scope int x = 2) {
+			return x * 10;
+		}
+
 	}
 
 	class ReflectionUdaTest {
@@ -1433,10 +1512,13 @@ version(unittest) {
 	// Basic class tester:
 	unittest {
 		TypeMetadata metadata = createMetadata!ReflectionTestClass;
+		assert(metadata.base == typeid(Object));
 		ReflectionTestClass instance = new ReflectionTestClass();
 		auto children = metadata.children;
 		auto firstMethod = metadata.findMethod("foo", [typeid(int)]);
 		assert(firstMethod != MethodMetadata.init);
+		assert(firstMethod.name == "foo");
+		assert(firstMethod.returnType == typeid(int));
 		assert(firstMethod.invoke(instance, 3) == 3);
 		assert(metadata.invokeMethod("foo", instance, 4) == 4);
 		assert(metadata.findMethod("val") == MethodMetadata.init);
@@ -1445,6 +1527,52 @@ version(unittest) {
 		assert(val.getValue(instance) == 3);
 		auto newInst = metadata.createInstance(200).get!ReflectionTestClass;
 		assert(newInst.val == 200);
+		auto valBackingField = metadata.findValue("_val");
+		assert(valBackingField.name == "_val");
+		assert(valBackingField.protection == ProtectionLevel.private_);
+		assert(valBackingField.fieldData.declaringType == typeid(ReflectionTestClass));
+		MethodMetadata doubler = metadata.findMethod("doubleRef", typeid(int));
+		assert(doubler.name == "doubleRef");
+		assert(doubler.symbol.protection == ProtectionLevel.public_);
+		assert(doubler.parameters.length == 1);
+		assert(doubler.returnType == typeid(void));
+		auto doublerParam = doubler.findParameter("x");
+		assert(doublerParam.name == "x");
+		assert(!doublerParam.hasDefaultValue);
+		assert(doublerParam.modifiers == (ParameterStorageClass.lazy_ | ParameterStorageClass.scope_));
+		MethodMetadata staticMethod = metadata.findMethod("staticMethod");
+		assert(staticMethod.name == "staticMethod");
+		assert(staticMethod.invoke(null) == 3);
+
+
+		// Test derived classes:
+		auto derivedData = createMetadata!ReflectionDerivedClass;
+		Variant derived = derivedData.createInstance(); // Test as Variant.
+		assert(derived.metadata == derivedData);
+		assert(derivedData.base == typeid(ReflectionTestClass));
+		MethodMetadata fooData = derivedData.findMethod("foo", typeid(int));
+		assert(fooData.name == "foo");
+		assert(fooData.protection == ProtectionLevel.public_);
+		assert(fooData.parameters.length == 1);
+		ParameterMetadata param = fooData.findParameter("x");
+		assert(param.name == "x");
+		assert(param.hasDefaultValue);
+		assert(param.defaultValue == 2);
+		assert(param.modifiers & ParameterStorageClass.scope_);
+		assert(param.type == typeid(int));
+		assert(fooData.invoke(derived, 4) == 40);
+		assert(derivedData.findMethod("foo", typeid(string)) == MethodMetadata.init);
+		assert(derivedData.findMethod("foobar", typeid(string)) == MethodMetadata.init);
+		ValueMetadata derivedField = derivedData.findValue("derivedField");
+		assert(derivedField.name == "derivedField");
+		assert(derivedField.kind == DataKind.field);
+		auto derivedFieldData = derivedField.fieldData;
+		assert(derivedFieldData.declaringType == typeid(ReflectionDerivedClass));
+		assert(derivedFieldData.index == 0);
+		ValueMetadata nonDerivedField = derivedData.findValue("_val");
+		assert(nonDerivedField.name == "_val");
+		assert(nonDerivedField.fieldData.declaringType == typeid(ReflectionTestClass));
+		assert(metadata.findMethod("staticMethod") == staticMethod);
 	}
 
 	// Interface tests:
@@ -1467,6 +1595,8 @@ version(unittest) {
 		assert(field != ValueMetadata.init);
 		assert(field.attributes.length == 1);
 		assert(field.hasAttribute(typeid(ReflectionTestAttribute)));
+		assert(!field.hasAttribute(typeid(int)));
+		assert(field.findAttribute!int == 0);
 		auto attr = field.findAttribute!ReflectionTestAttribute;
 		assert(attr == ReflectionTestAttribute(3));
 		auto prop = metadata.findValue("valProp");
@@ -1482,8 +1612,35 @@ version(unittest) {
 		assert(checkerData.invokeMethod("check", checker, 4).get!bool);+/
 	}
 
+	// Test various things with variants.
+	unittest {
+		auto structData = createMetadata!ReflectionTestStruct;
+		ReflectionTestStruct s = ReflectionTestStruct("abc");
+		Variant v = s;
+		assert(v.metadata == structData);
+		ValueMetadata stringVal = structData.findValue("stringVal");
+		assert(stringVal != ValueMetadata.init);
+		assert(stringVal.getValue(v) == "abc");
+		/+stringVal.setValue(v, "def");
+		assert(stringVal.getValue(v) == "def");+/
+
+		auto derivedData = createMetadata!ReflectionDerivedClass;
+		ReflectionTestInterface testInter = new ReflectionDerivedClass();
+		Variant interVar = testInter;
+		assert(derivedData.findMethod("foo", typeid(int)) != MethodMetadata.init);
+		assert(derivedData.invokeMethod("foo", interVar, 5) == 50);
+	
+		auto largeData = createMetadata!ReflectionLargeStructTester;
+		Variant largeVar = ReflectionLargeStructTester(4);
+		assert(largeData == largeVar.metadata);
+		assert(largeData.getValue("val", largeVar) == 4);
+		assert(largeData.invokeMethod("returnDouble", largeVar) == 8);
+		/+largeData.setValue("val", largeVar, 6);
+		assert(largeData.getValue("val", largeVar) == 6);+/
+	}
+
 	// Test module header example.
-	// Would be nice if documented unittests worked on module headers...
+	// Would be nice if documented unittests worked on module headers.
 	unittest {
 		class Foo {
 			int _val;
