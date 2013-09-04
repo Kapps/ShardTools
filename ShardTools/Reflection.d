@@ -63,28 +63,42 @@ import std.exception;
 enum ProtectionLevel {
 	/// No protection level exists for this particular symbol.
 	none_ = 0,
+	/// The symbol is private, accessible only to the current module.
 	private_,
+	/// The symbol is protected, accessible to types derived from the given type.
 	protected_,
+	/// The symbol is accessible by any module within the same package.
 	package_,
+	/// The symbol is public, accessible by any module from the same library.
 	public_,
+	/// The symbol is exported across library boundaries.
 	export_
 }
 
 /// Indicates whther a value refers to a field or a property.
 enum DataKind {
+	/// The data is a raw field.
 	field,
+	/// The data has a property backing it.
 	property,
+	/// The data is an enum constant.
 	constant
 }
 
 /// Indicates whether an instance of TypeMetadata provides information for a struct, class, union, interface, or enum.
 /// Also includes a primitive type for built in types (int, long, etc) as well as pointers and arrays.
 enum TypeKind {
+	///
 	struct_, 
+	///
 	class_, 
+	///
 	union_, 
+	///
 	enum_,
+	///
 	interface_,
+	///
 	primitive_
 }
 
@@ -98,9 +112,6 @@ mixin(MakeException("ReflectionException"));
 // This includes symbols.
 // They already are after being loaded, it's just not typed properly.
 // Actually even invoke could be immutable as it doesn't modify anything related to the metadata, just not pure.
-
-// TODO: name and protection can be either a mixin or in a separate Symbol struct.
-// We repeat them far too much. Note that parameters and modules have names but not protection levels.
 
 /// Provides information about the symbol that a metadata instance represents.
 /// This includes features such as name, protection, and user-defined attributes.
@@ -199,7 +210,9 @@ private:
 /// Stores information about a type (class, union, struct, enum, interface).
 struct TypeMetadata {
 
-	this(Symbol symbol, size_t instanceSize, TypeInfo type, TypeKind kind, SymbolContainer children, TypeInfo base, TypeInfo[] interfaces) {
+	this(Symbol symbol, size_t instanceSize, TypeInfo type, TypeKind kind, SymbolContainer children, 
+	     TypeInfo base, TypeInfo parent, TypeInfo[] interfaces) {
+
 		this._symbol = symbol;
 		this._base = base;
 		this._interfaces = interfaces;
@@ -207,6 +220,7 @@ struct TypeMetadata {
 		this._kind = kind;
 		this._type = type;
 		this._instanceSize = instanceSize;
+		this._parent = parent;
 	} 
 
 	alias symbol this;
@@ -246,6 +260,12 @@ struct TypeMetadata {
 		return _interfaces;
 	}
 
+	/// If this type is a nested type, returns the parent of the type.
+	/// Otherwise, returns null.
+	@property const(TypeInfo) parent() const pure nothrow {
+		return _parent;
+	}
+
 	/// Gets the child symbols that this type contains.
 	@property SymbolContainer children() {
 		return _children;
@@ -259,6 +279,7 @@ private:
 	TypeInfo _base;
 	TypeInfo[] _interfaces;
 	TypeInfo _type;
+	TypeInfo _parent;
 	size_t _instanceSize;
 	SymbolContainer _children;
 	TypeKind _kind;
@@ -269,12 +290,6 @@ private:
 struct SymbolContainer {
 
 	// TODO: Don't duplicate; get a real non-transitive read-only return type instead.
-
-	this(TypeInfo[] types, MethodMetadata[] methods, ValueMetadata[] values) {
-		this._types = types;
-		this._methods = methods;
-		this._values = values;
-	}
 
 	/// Returns all of the types that this symbol contains.
 	@property const(TypeInfo[]) types() const {
@@ -718,15 +733,23 @@ TypeMetadata createMetadata(T)() {
 		Symbol symbol = getSymbol!T;
 		static if(isPrimitive!T && !is(T == enum)) {
 			SymbolContainer symbols = SymbolContainer.init;
+			TypeInfo parent = null;
 		} else {
 			SymbolContainer symbols = getSymbols!T;
+			static if(__traits(compiles, isAggregateType!(__traits(parent, T)))) {
+				static if(isAggregateType!(__traits(parent, T)))
+					TypeInfo parent = registerLazyLoader!(__traits(parent, T));
+				else
+					TypeInfo parent = null;
+			} else
+				TypeInfo parent = null;
 		}
 		TypeKind kind = getTypeKind!T;
 		TypeInfo type = typeid(Unqual!T);
 		TypeInfo base = getBase!T;
 		size_t instanceSize = getSize!T;
 		TypeInfo[] interfaces = getInterfaces!T;
-		TypeMetadata result = TypeMetadata(symbol, instanceSize, type, kind, symbols, base, interfaces);
+		TypeMetadata result = TypeMetadata(symbol, instanceSize, type, kind, symbols, base, parent, interfaces);
 		//synchronized(typeid(TypeMetadata)) {
 		_typeData[typeid(Unqual!T)] = StoredTypeMetadata(result);
 		//}
@@ -750,6 +773,22 @@ TypeInfo registerLazyLoader(T)() {
 	}
 	//}
 	return typeid(Unqual!T);
+}
+
+/// Finds the type with the given name on the specified metadata.
+/// If no value is found, init is returned.
+TypeMetadata findType(T)(T instance, string name) {
+	foreach(ref type; instance.children._types) {
+		// HACK: We don't know the actual name of the type as TypeInfo does not store the relative name.
+		// So instead we just take the absolute name that .text gives us and strip past the last dot.
+		string typeName = type.text;
+		size_t lastDot = typeName.retro.countUntil('.');
+		if(lastDot != -1)
+			typeName = typeName[$-lastDot..$];
+		if(typeName == name)
+			return type.metadata;
+	}
+	return TypeMetadata.init;
 }
 
 /// Returns the value on the given type that has the specified name.
@@ -834,6 +873,9 @@ void setValue(T, InstanceType, ValueType)(T metadata, string valueName, Instance
 Variant createInstance(ArgTypes...)(TypeMetadata metadata, ArgTypes args) {
 	if(metadata.kind != TypeKind.struct_ && metadata.kind != TypeKind.class_)
 		throw new NotSupportedException("Only structs and classes may be instantiated through createInstance.");
+	// TODO: We should be able to create instances of nested types if they're marked static.
+	//if(metadata.parent !is null)
+	//	throw new NotSupportedException("Unable to create instances of nested types.");
 	TypeInfo[] argTypes = templateArgsToTypeInfo!(ArgTypes);
 	MethodMetadata method = findMethod(metadata, "__ctor", argTypes);
 	if(metadata.kind == TypeKind.struct_) {
@@ -921,8 +963,7 @@ private SymbolContainer getSymbols(alias T)() {
 			//version(logreflect) writeln("Processing member ", m, " on ", T.stringof, ".");
 			alias aliasSelf!(__traits(getMember, T, m)) member;
 			static if(isType!member) {
-				result._types ~= registerLazyLoader!(typeof(member));
-				version(logreflect) writeln("Added ", m, " as a type with metadata available to be loaded upon demand.");
+				result._types ~= registerLazyLoader!(member);
 			} else static if(__traits(getOverloads, T, m).length > 0) {
 				MethodMetadata propertyGetter;
 				MethodMetadata[] propertySetters;
@@ -970,7 +1011,10 @@ private ValueMetadata getEnumValue(T, string m)() {
 	TypeInfo type = typeid(T);
 	DataGetterFunction getter = &getEnumConstant!(T, m);
 	DataSetterFunction setter = null;
-	return ValueMetadata(symbol, dataKind, type, getter, setter);
+	enum size_t index = fieldIndex!(T, m);
+	enum size_t offset = index * T.sizeof;
+	FieldValueMetadata fieldData = FieldValueMetadata(index, 0, typeid(T));
+	return ValueMetadata(symbol, dataKind, type, getter, setter, fieldData);
 }
 
 private ValueMetadata getField(T, string m)() {
@@ -1121,7 +1165,8 @@ private Variant invokeMethod(alias func, T, MethodParentKind parentType)(MethodM
 	// TODO: Look at staticMap to do this.
 	if(args.length != arity!func)
 		throw new ReflectionException("Expected " ~ arity!func.text ~ " arguments to " ~ metadata.name ~ ", not " ~ args.length.text ~ ".");
-	static if(arity!func > 0)
+	staticMap!(Unqual, ParameterTypeTuple!func) params;
+	/+static if(arity!func > 0)
 		Unqual!(ParameterTypeTuple!(func)) params;
 	else
 		alias TypeTuple!() params;
@@ -1131,6 +1176,9 @@ private Variant invokeMethod(alias func, T, MethodParentKind parentType)(MethodM
 		foreach(i, type; ParameterTypeTuple!(func)) {
 			params[i] = args[i].get!type;
 		}
+	}+/
+	foreach(i, type; typeof(params)) {
+		params[i] = args[i].get!type;
 	}
 	// TODO: Clean up return type stuffs.
 	static if(__traits(isStaticFunction, func)) {
@@ -1139,7 +1187,8 @@ private Variant invokeMethod(alias func, T, MethodParentKind parentType)(MethodM
 		else
 			func(params);
 	} else {
-		ReturnType!func delegate(ParameterTypeTuple!func) dg;
+		// Unqual to prevent inout issues.
+		Unqual!(ReturnType!func) delegate(ParameterTypeTuple!func) dg;
 		static if(__traits(isVirtualMethod, func)) {
 			// If this is a virtual method we'll have to handle dispatching it manually.
 			enforce(metadata.vtblSlot > 0, "Attempting to call a virtual function with no vtable index computable.");
@@ -1149,7 +1198,7 @@ private Variant invokeMethod(alias func, T, MethodParentKind parentType)(MethodM
 			void* funcPtr = cast(void*)&func;
 			size_t thisOffset = 0;
 		}
-		dg.funcptr = cast(ReturnType!func function(ParameterTypeTuple!func))(funcPtr);
+		dg.funcptr = cast(Unqual!(ReturnType!func) function(ParameterTypeTuple!func))(funcPtr);
 		dg.ptr = cast(void*)instance + thisOffset;
 		static if(!is(ReturnType!func == void))
 			auto result = dg(params);
@@ -1250,7 +1299,7 @@ private void setPropertyValue(InstanceType)(ValueMetadata metadata, Variant inst
 	method.invokeInternal!(InstanceType)(instanceWrapper.get!(InstanceType*), valueWrapper);
 }
 
-private Variant getEnumConstant(T, string m)(Variant instance) {
+private Variant getEnumConstant(T, string m)(ValueMetadata unused, Variant instance) {
 	// NOTE: cast instead of to, in order to prevent to!string(enum) which is wrong if base is string.
 	return Variant(cast(OriginalType!T)__traits(getMember, T, m));
 }
@@ -1318,12 +1367,8 @@ private template isPrimitive(T) {
 	enum isPrimitive = (isBuiltinType!T || isArray!T || isPointer!T);
 }
 
-private template isType(T) {
-	enum isType = is(T == class) || is(T == struct) || is(T == union) || is(T == enum) || is(T == interface);
-}
-
-private template isType(alias T) {
-	enum isType = false;
+private template isType(T...) if(T.length == 1) {
+	enum isType = is(T[0] == class) || is(T[0] == struct) || is(T[0] == union) || is(T[0] == enum) || is(T[0] == interface);
 }
 
 private template isField(alias T) {
@@ -1335,8 +1380,6 @@ private template isVariant(T) {
 	enum isVariant = is(Unqual!T == Variant);
 }
 
-// hasField (fieldIndex) and hasFieldImpl (fieldIndexImpl) credits to Jacob Carlborg.
-// Simply changed a bit to alias to an index instead so we can use it with tupleof.
 private template fieldIndex(T, string field) {
 	static if(is(T == interface))
 		enum fieldIndex = -1;
@@ -1346,12 +1389,17 @@ private template fieldIndex(T, string field) {
 }
 
 private template fieldIndexImpl (T, string field, size_t i) {
-	static if (T.tupleof.length == i)
+	static if(is(T == enum)) {
+		static if(__traits(allMembers, T).length == i)
+			enum fieldIndexImpl = -1;
+		else static if(__traits(allMembers, T)[i] == field)
+			enum fieldIndexImpl = i;
+		else
+			enum fieldIndexImpl = fieldIndexImpl!(T, field, i + 1);
+	} else static if (T.tupleof.length == i)
 		enum fieldIndexImpl = -1;
-	else static if(T.tupleof[i].stringof == field) // Something changed that seems to require this?
+	else static if(T.tupleof[i].stringof == field)
 		enum fieldIndexImpl = i;
-	//else static if (T.tupleof[i].stringof[1 + T.stringof.length + 2 .. $] == field)
-	//	enum fieldIndexImpl = i;
 	else
 		enum fieldIndexImpl = fieldIndexImpl!(T, field, i + 1);
 }
@@ -1475,7 +1523,26 @@ version(unittest) {
 
 	enum ReflectionTestBaseEnum : string {
 		myVal = "mv",
-		myVal2 = "mv2"
+		myVal2 = "mv2",
+		myValDup = "mv"
+	}
+
+	class ReflectionTestNestedClass {
+		int a;
+		class Nested {
+			int _b;
+			this(int b) {
+				this._b = b;
+			}
+
+			@property int b() const {
+				return _b;
+			}
+
+			int returnDouble() const {
+				return b * 2;
+			}
+		}
 	}
 
 	// Full functionality tests.
@@ -1483,6 +1550,7 @@ version(unittest) {
 	// Basic struct tester:
 	unittest {
 		TypeMetadata metadata = createMetadata!ReflectionTestStruct;
+		assert(metadata.kind == TypeKind.struct_);
 		ReflectionTestStruct instance = ReflectionTestStruct();
 		instance.stringVal = "abc";
 		auto children = metadata.children;
@@ -1513,6 +1581,8 @@ version(unittest) {
 	unittest {
 		TypeMetadata metadata = createMetadata!ReflectionTestClass;
 		assert(metadata.base == typeid(Object));
+		assert(metadata.kind == TypeKind.class_);
+		assert(metadata.parent is null);
 		ReflectionTestClass instance = new ReflectionTestClass();
 		auto children = metadata.children;
 		auto firstMethod = metadata.findMethod("foo", [typeid(int)]);
@@ -1549,6 +1619,7 @@ version(unittest) {
 		auto derivedData = createMetadata!ReflectionDerivedClass;
 		Variant derived = derivedData.createInstance(); // Test as Variant.
 		assert(derived.metadata == derivedData);
+		assert(derivedData.parent is null);
 		assert(derivedData.base == typeid(ReflectionTestClass));
 		MethodMetadata fooData = derivedData.findMethod("foo", typeid(int));
 		assert(fooData.name == "foo");
@@ -1588,6 +1659,34 @@ version(unittest) {
 		assert(val.getValue(derived) == 6);
 	}
 
+	// Enum tests:
+	unittest {
+		TypeMetadata metadata = createMetadata!ReflectionTestEnum;
+		assert(metadata.name == "ReflectionTestEnum");
+		assert(metadata.kind == TypeKind.enum_);
+		assert(metadata.children.values.length == 3);
+		ValueMetadata val = metadata.findValue("a");
+		assert(val.fieldData.index == 0);
+		assert(metadata.findValue("b").fieldData.index == 1);
+		assert(metadata.findValue("c").fieldData.index == 2);
+		assert(val.name == "a");
+		assert(val.getValue(null) == 0);
+		assert(metadata.getValue("b", null) == 1);
+		assert(metadata.getValue("c", null) == 2);
+
+		TypeMetadata baseData = createMetadata!ReflectionTestBaseEnum;
+		assert(baseData.base == typeid(string));
+		assert(baseData.getValue("myVal", null) == "mv");
+		ValueMetadata myVal = baseData.findValue("myVal");
+		ValueMetadata myValDup = baseData.findValue("myValDup");
+		assert(myVal.getValue(null) == myValDup.getValue(null));
+		assert(myVal.kind == DataKind.constant);
+		assert(myVal.getValue(null) == "mv");
+		assert(myVal.fieldData.index == 0);
+		assert(myValDup.fieldData.index == 2);
+	
+	}
+
 	// UDA tests
 	unittest {
 		auto metadata = createMetadata!ReflectionUdaTest;
@@ -1612,6 +1711,22 @@ version(unittest) {
 		assert(checkerData.invokeMethod("check", checker, 4).get!bool);+/
 	}
 
+	// Nested type tests
+	unittest {
+		auto parentData = createMetadata!ReflectionTestNestedClass;
+		assert(parentData.children.values.length == 1);
+		assert(parentData.findValue("a") != ValueMetadata.init);
+		assert(parentData.findValue("b") == ValueMetadata.init);
+		assert(parentData.name == "ReflectionTestNestedClass");
+		assert(parentData.children.types.length == 2);
+		auto metadata = parentData.findType("Nested");
+		assert(metadata.name == "Nested");
+		assert(metadata.children.values.length == 2);
+		auto instance = metadata.createInstance(5);
+		assert(metadata.getValue("_b", instance) == 5);
+		assert(metadata.invokeMethod("returnDouble", instance) == 10);
+	}
+
 	// Test various things with variants.
 	unittest {
 		auto structData = createMetadata!ReflectionTestStruct;
@@ -1621,8 +1736,6 @@ version(unittest) {
 		ValueMetadata stringVal = structData.findValue("stringVal");
 		assert(stringVal != ValueMetadata.init);
 		assert(stringVal.getValue(v) == "abc");
-		/+stringVal.setValue(v, "def");
-		assert(stringVal.getValue(v) == "def");+/
 
 		auto derivedData = createMetadata!ReflectionDerivedClass;
 		ReflectionTestInterface testInter = new ReflectionDerivedClass();
@@ -1635,8 +1748,6 @@ version(unittest) {
 		assert(largeData == largeVar.metadata);
 		assert(largeData.getValue("val", largeVar) == 4);
 		assert(largeData.invokeMethod("returnDouble", largeVar) == 8);
-		/+largeData.setValue("val", largeVar, 6);
-		assert(largeData.getValue("val", largeVar) == 6);+/
 	}
 
 	// Test module header example.
