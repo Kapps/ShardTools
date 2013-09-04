@@ -54,6 +54,7 @@ import std.traits;
 import std.algorithm;
 import std.typetuple;
 import std.conv;
+import std.string;
 version(logreflect) import std.stdio;
 import core.stdc.string;
 import core.memory;
@@ -102,6 +103,32 @@ enum TypeKind {
 	primitive_
 }
 
+/// Provides a bitwise enumeration of the modifiers that are applied to one more than one kind of symbol.
+/// This includes storage classes and type qualifiers.
+enum SymbolModifiers {
+	/// 
+	none_ = 0,
+	///
+	const_ = 1,
+	///
+	extern_ = 2,
+	///
+	immutable_ = 4,
+	///
+	scope_ = 8,
+	///
+	shared_ = 16,
+	///
+	static_ = 32,
+	///
+	synchronized_ = 64,
+	///
+	gshared_ = 128
+	// No support for deprecated yet.
+	/+///
+	deprecated_ = 512,+/
+}
+
 alias Variant function(ValueMetadata metadata, Variant instance) DataGetterFunction;
 alias void function(ValueMetadata metadata, Variant instance, Variant value) DataSetterFunction;
 alias Variant function(MethodMetadata, void*, Variant[] args) MethodInvokeFunction;
@@ -117,24 +144,33 @@ mixin(MakeException("ReflectionException"));
 /// This includes features such as name, protection, and user-defined attributes.
 struct Symbol {
 
-	this(string name, ProtectionLevel protection, Variant[] attributes) {
+	this(string name, ProtectionLevel protection, Variant[] attributes, SymbolModifiers modifiers) {
 		this._name = name;
 		this._protection = protection;
 		this._attributes = attributes;
+		this._modifiers = modifiers;
 	}
 	
 	/// Returns the name of this symbol.
 	/// In certain cases, such as anonymous structs or unnamed parameters, this may be null.
-	@property string name() const pure nothrow {
+	@property string name() @safe const pure nothrow {
 		return _name;
 	}
 
 	/// Returns the protection level for this symbol, such as public or private.
 	/// Some symbols may not have a protection level, such as modules and parameters.
 	/// In this case the value would be none.
-	@property ProtectionLevel protection() const pure nothrow {
+	@property ProtectionLevel protection() @safe const pure nothrow {
 		return _protection;
 	}
+
+	// TODO: Implement.
+	/// Returns the modifiers that apply to this symbol.
+	@disable @property SymbolModifiers modifiers() @safe const pure nothrow {
+		return _modifiers;
+	}
+
+	//mixin(getIsFlagsMixin!(SymbolModifiers, "modifiers"));
 
 	/// Returns a duplicate of the array containing any attributes that apply to this symbol.
 	@property Variant[] attributes() pure {
@@ -161,10 +197,11 @@ struct Symbol {
 		}
 		return defaultValue();
 	}
-
+	
 	private string _name;
 	private ProtectionLevel _protection;
 	private Variant[] _attributes;
+	SymbolModifiers _modifiers;
 }
 
 /// Provides information about a module and the symbols it contains.
@@ -898,14 +935,13 @@ Variant createInstance(ArgTypes...)(TypeMetadata metadata, ArgTypes args) {
 	}
 }
 
-// TODO: Once alias T starts working for built-in types, replace this.
-
 private Symbol getSymbol(Args...)() if(Args.length == 1) {
 	alias T = Args[0];
 	string name = getName!T;
 	ProtectionLevel protection = getProtection!T;
 	Variant[] attributes = getAttributes!T;
-	Symbol result = Symbol(name, protection, attributes);
+	SymbolModifiers modifiers = SymbolModifiers.none_;
+	Symbol result = Symbol(name, protection, attributes, modifiers);
 	return result;
 }
 
@@ -999,7 +1035,7 @@ private bool hasField(T, string m)() {
 private ValueMetadata getEnumValue(T, string m)() {
 	enum dataKind = DataKind.constant;
 	// Enums can't have attributes or protection.
-	Symbol symbol = Symbol(m, ProtectionLevel.none_, null);
+	Symbol symbol = Symbol(m, ProtectionLevel.none_, null, SymbolModifiers.immutable_);
 	TypeInfo type = typeid(T);
 	DataGetterFunction getter = &getEnumConstant!(T, m);
 	DataSetterFunction setter = null;
@@ -1025,7 +1061,8 @@ private ValueMetadata getField(T, string m)() {
 		ProtectionLevel protection = to!ProtectionLevel(__traits(getProtection, __traits(getMember, T, m)) ~ "_");
 		auto unparsedAttribs = __traits(getAttributes, __traits(getMember, T, m));
 		Variant[] attributes = attributeTupleToArray(unparsedAttribs);
-		Symbol symbol = Symbol(name, protection, attributes);
+		SymbolModifiers modifiers = SymbolModifiers.none_;
+		Symbol symbol = Symbol(name, protection, attributes, modifiers);
 		TypeInfo declaringType = typeid(T);
 		FieldValueMetadata fieldData = FieldValueMetadata(index, offset, declaringType);
 		return ValueMetadata(symbol, dataKind, type, getter, setter, fieldData);
@@ -1039,7 +1076,7 @@ private ValueMetadata getProperty(T)(MethodMetadata getterMethod, MethodMetadata
 	ProtectionLevel protection = getterMethod.symbol._protection;
 	// We default to the getter's name and protection, but no attributes.
 	// Attributes should be gotten for each individual method.
-	Symbol symbol = Symbol(name, protection, null);
+	Symbol symbol = Symbol(name, protection, null, SymbolModifiers.none_);
 	PropertyValueMetadata propertyData = PropertyValueMetadata(getterMethod, setterMethods);
 	DataGetterFunction getter = &getPropertyValue!(T);
 	DataSetterFunction setter = &setPropertyValue!(T);
@@ -1154,21 +1191,9 @@ private size_t getSize(T)() {
 }
 
 private Variant invokeMethod(alias func, T, MethodParentKind parentType)(MethodMetadata metadata, void* instance, Variant[] args) {
-	// TODO: Look at staticMap to do this.
 	if(args.length != arity!func)
 		throw new ReflectionException("Expected " ~ arity!func.text ~ " arguments to " ~ metadata.name ~ ", not " ~ args.length.text ~ ".");
 	staticMap!(Unqual, ParameterTypeTuple!func) params;
-	/+static if(arity!func > 0)
-		Unqual!(ParameterTypeTuple!(func)) params;
-	else
-		alias TypeTuple!() params;
-	static if(arity!func == 1)
-		params = args[0].get!(typeof(params));
-	else static if(arity!func > 0) {
-		foreach(i, type; ParameterTypeTuple!(func)) {
-			params[i] = args[i].get!type;
-		}
-	}+/
 	foreach(i, type; typeof(params)) {
 		params[i] = args[i].get!type;
 	}
@@ -1380,7 +1405,7 @@ private template fieldIndex(T, string field) {
 	}
 }
 
-private template fieldIndexImpl (T, string field, size_t i) {
+private template fieldIndexImpl(T, string field, size_t i) {
 	static if(is(T == enum)) {
 		static if(__traits(allMembers, T).length == i)
 			enum fieldIndexImpl = -1;
@@ -1394,6 +1419,18 @@ private template fieldIndexImpl (T, string field, size_t i) {
 		enum fieldIndexImpl = i;
 	else
 		enum fieldIndexImpl = fieldIndexImpl!(T, field, i + 1);
+}
+
+private string getIsFlagsMixin(T, string flagsName)() if(is(T == enum)) {
+	string result = "";
+	foreach(m; __traits(allMembers, T)) {
+		string transformedName = capitalize(m);
+		if(transformedName[$-1] == '_')
+			transformedName = transformedName[0..$-1];
+		result ~= "@property bool is" ~ transformedName ~ "() @safe const pure nothrow {";
+		result ~= "\r\n\treturn (" ~ flagsName ~ " & " ~ T.stringof ~ "." ~ m ~ ") != 0;\r\n}";
+	}
+	return result;
 }
 
 version(unittest) {
