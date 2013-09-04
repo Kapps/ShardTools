@@ -458,14 +458,6 @@ struct MethodMetadata {
 			void* contextPtr = cast(void*)cast(Object)*instancePtr;
 		} else
 			void* contextPtr = cast(void*)(*instancePtr);
-		/+void* instancePtr;
-		// TODO: Find a better way to check if variant.
-		static if(is(InstanceType == Variant)) {
-			// TODO: Add support for this.
-			// Is it needed? I'd imagine that a pointer to a Variant == a pointer to it's data. Maybe. Probably not. Types >X bytes may be stored as pointers.
-		} else {
-			instancePtr = cast(void*)instance;
-		}+/
 		return _invoker(this, contextPtr, args);
 	}
 
@@ -583,7 +575,7 @@ struct ValueMetadata {
 	private void enforceCanSet(InstanceType)(ref InstanceType instance) {
 		if(!canSet)
 			throw new NotSupportedException("Attempted to set a value on a member that did not support it.");
-		static if(is(InstanceType == Variant)) {
+		static if(isVariant!InstanceType) {
 			// This isn't really possible.
 			// While yes, we could make it work in this some cases (adjusting values on a Variant),
 			// this would lead to things like getValue(instance).setValue("bar", 3) and expecting instance.bar to be changed.
