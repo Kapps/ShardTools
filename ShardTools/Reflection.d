@@ -755,6 +755,8 @@ TypeMetadata createMetadata(T)() {
 
 	// For now, I doubt the concurrency is going to be too important so just lock a single thing (RWMutex it).
 	//synchronized(typeid(T)) {
+	// Below pragma could be useful in situations where you want to know exactly what's being compiled in.
+	version(debugreflect) pragma(msg, "Creating metadata for " ~ T.stringof);
 	synchronized(typeid(TypeMetadata)) {
 		TypeMetadata existing = getStoredExisting(typeid(Unqual!T), true);
 		if(existing != TypeMetadata.init)
@@ -1000,7 +1002,12 @@ private SymbolContainer getSymbols(alias T)() {
 					static if(functionAttributes!func & FunctionAttribute.property) {
 						// A getter is defined as a property that returns non-void and takes in zero parameters.
 						if(arity!func == 0 && !is(ReturnType!func == void)) {
-							assert(propertyGetter == MethodMetadata.init);
+							// TODO: BUG: It is possible to have multiple getters.
+							// For example, one const and one non-const.
+							// Decide how this should be handled.
+							// For the moment it's fine because we completely ignore const and such.
+							// Obviously that's not a great solution going forward however.
+							//assert(propertyGetter == MethodMetadata.init);
 							propertyGetter = method;
 						} else {
 							// Otherwise, it's a setter.
@@ -1013,7 +1020,7 @@ private SymbolContainer getSymbols(alias T)() {
 				if(propertyGetter != MethodMetadata.init || propertySetters.length > 0)
 					result._values ~= getProperty!(T)(propertyGetter, propertySetters);
 			} else {
-				version(logreflect) writeln("Skipped unknown member ", m, " on ", T.stringof, ".");
+				version(logreflect) writeln("Skipped unsupported member ", member.stringof, " on ", T.stringof, ".");
 			}
 		} else {
 			version(logreflect) writeln("Skipped member ", m, " on ", T.stringof, " because it was not accessible.");
@@ -1052,14 +1059,14 @@ private ValueMetadata getField(T, string m)() {
 		return getField!(BaseClassesTuple!T[0], m);
 	else {
 		TypeInfo type = typeid(typeof(T.tupleof[index]));
-		size_t offset = __traits(getMember, T, m).offsetof;
+		size_t offset = T.tupleof[index].offsetof; //__traits(getMember, T, m).offsetof;
 		DataGetterFunction getter = &getFieldValue!(T, index);
 		DataSetterFunction setter = &setFieldValue!(T, index);
 		// Unfortunately have to duplicate this, couldn't get getSymbol to work with private fields.
 		// Passing in the symbol causes it to try to be evaluated and has errors with static.
 		string name = m;
 		ProtectionLevel protection = to!ProtectionLevel(__traits(getProtection, __traits(getMember, T, m)) ~ "_");
-		auto unparsedAttribs = __traits(getAttributes, __traits(getMember, T, m));
+		auto unparsedAttribs = __traits(getAttributes, T.tupleof[index]);
 		Variant[] attributes = attributeTupleToArray(unparsedAttribs);
 		SymbolModifiers modifiers = SymbolModifiers.none_;
 		Symbol symbol = Symbol(name, protection, attributes, modifiers);
@@ -1097,8 +1104,8 @@ private MethodMetadata getMethod(alias func, T)() {
 	}
 	TypeInfo returnType = registerLazyLoader!(ReturnType!func);
 	static if(__traits(isVirtualMethod, func)) {
-		static if(__traits(compiles, __traits(getVirtualIndex, T, func)))
-			size_t vtblSlot = __traits(getVirtualIndex, T, func);
+		static if(__traits(compiles, __traits(getVirtualIndex, func)))
+			size_t vtblSlot = __traits(getVirtualIndex, func);
 		else {
 			pragma(msg, "Your compiler does not support __traits(getVirtualIndex). Invoking virtual methods will fail.");
 			size_t vtblSlot = 0;
@@ -1238,7 +1245,7 @@ private void* getVirtualFunctionPointer(MethodParentKind parentType)(void* insta
 	// For classes, this is trivial; just get the slot returned by __traits(getVirtualIndex) in it's vtable.
 	static if(parentType == MethodParentKind.class_) {
 		vtbl = ci.vtbl;
-		enforce(vtbl.length > vtblSlot);
+		enforce(vtbl.length > vtblSlot && vtblSlot > 0);
 		thisOffset = 0;
 		return ci.vtbl[vtblSlot];
 	} else static if(parentType == MethodParentKind.interface_) {
