@@ -1,0 +1,11 @@
+{
+	"name": "shardtools",
+	"targetName": "ShardTools",
+	"description": "A tools library containing reflection data, buffer pooling, and many more utility classes.",
+	"homepage": "https://shardsoft.com",
+	"copyright": "Copyright © 2013, Ognjen Ivkovic",
+	"license": "Boost",
+	"dependencies": {
+	},
+	"targetType": "library"
+}
