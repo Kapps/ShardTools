@@ -3149,12 +3149,11 @@ struct Value
         }
     }
 
-
+@trusted {
     /**
      * Comparison for equality. @trusted for union.
      */
-    @trusted
-    bool opEquals(Tdummy = void)(ref const Value other) const
+    bool opEquals(Tdummy = void)(ref const Value other)
     {
         if (type != other.type)
             return false;
@@ -3165,7 +3164,7 @@ struct Value
         case Type.unsigned: return opEquals(other.via.uinteger);
         case Type.signed:   return opEquals(other.via.integer);
         case Type.floating: return opEquals(other.via.floating);
-        case Type.raw:      return opEquals(other.via.raw);
+        case Type.raw:      return opEquals!(ubyte[])(other.via.raw);
         case Type.array:    return opEquals(other.via.array);
         case Type.map:      return opEquals(other.via.map);
         }
@@ -3173,8 +3172,7 @@ struct Value
 
 
     /// ditto
-    @trusted
-    bool opEquals(T : bool)(in T other) const
+    bool opEquals(T : bool)(in T other)
     {
         if (type != Type.boolean)
             return false;
@@ -3184,8 +3182,7 @@ struct Value
 
 
     /// ditto
-    @trusted
-    bool opEquals(T : ulong)(in T other) const
+    bool opEquals(T : ulong)(in T other)
     {
         static if (__traits(isUnsigned, T)) {
             if (type != Type.unsigned)
@@ -3202,8 +3199,7 @@ struct Value
 
 
     /// ditto
-    @trusted
-    bool opEquals(T : real)(in T other) const
+    bool opEquals(T : real)(in T other)
     {
         if (type != Type.floating)
             return false;
@@ -3213,8 +3209,7 @@ struct Value
 
 
     /// ditto
-    @trusted
-    bool opEquals(T : const Value[])(in T other) const
+    bool opEquals(T : const Value[])(in T other)
     {
         if (type != Type.array)
             return false;
@@ -3224,8 +3219,7 @@ struct Value
 
 
     /// ditto
-    @trusted
-    bool opEquals(T : const Value[Value])(in T other) const
+    bool opEquals(T : const Value[Value])(in T other)
     {
         if (type != Type.map)
             return false;
@@ -3233,20 +3227,18 @@ struct Value
         // This comparison is instead of default comparison because 'via.map == other' raises "Access Violation".
         foreach (key, value; via.map) {
             if (key in other) {
-                if (other[key] != value)
+                if (cast()other[key] != cast()value)
                     return false;
             } else {
                 return false;
             }
         }
-
         return true;
     }
 
 
     /// ditto
-    @trusted
-    bool opEquals(T : ubyte[])(in T other) const
+    bool opEquals(T : ubyte[])(in T other) 
     {
         if (type != Type.raw)
             return false;
@@ -3256,14 +3248,15 @@ struct Value
 
 
     /// ditto
-    @trusted
-    bool opEquals(T : string)(in T other) const
+    bool opEquals(T : string)(in T other)
     {
         if (type != Type.raw)
             return false;
 
         return via.raw == cast(ubyte[])other;
     }
+
+}
 }
 
 
@@ -4754,7 +4747,8 @@ template getFieldName(Type, size_t i)
     static assert(i < Type.tupleof.length, text(Type.stringof, " has ", Type.tupleof.length, " attributes: given index = ", i));
 
     // 3 means () + .
-    enum getFieldName = Type.tupleof[i].stringof[3 + Type.stringof.length..$];
+    // No need for that anymore since type no longer returned.
+    enum getFieldName = Type.tupleof[i].stringof;
 }
 
 
