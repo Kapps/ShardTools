@@ -201,7 +201,7 @@ struct Symbol {
 		            ~ "or in the case of attributes with a single field, the field it contains.");
 		foreach(ref attrib; retro(_attributes)) {
 			if(attrib.type == typeid(T)) {
-				return attrib.get!U;
+				return attrib.get!T.tupleof[0];
 			}
 		}
 		return defaultValue();

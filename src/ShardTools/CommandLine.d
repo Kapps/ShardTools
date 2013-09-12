@@ -27,7 +27,6 @@ T getCommandLineOptions(T)(ref string[] args) {
 		void setValue(string key, string arg) {
 			Variant convertedVal = paramTypeData.coerceFrom(arg);
 			value.setValue(instance, convertedVal);
-			writeln("Set value of " ~ name ~ " to " ~ arg ~ " (" ~ convertedVal.text ~ ").");
 		}
 		size_t oldLength = args.length;
 		getopt(args, config.caseInsensitive, config.passThrough, name, &setValue);
@@ -65,8 +64,4 @@ private auto usedValues(TypeMetadata metadata) {
 /// Indicates that the given letter can be used as an alternative to this argument name.
 struct ShortName {
 	dchar letter;
-}
-
-@disable struct Command {
-	string name;
 }
