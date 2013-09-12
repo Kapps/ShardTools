@@ -730,7 +730,6 @@ struct PropertyValueMetadata {
 /// is not available, reflection data for type T will be returned instead.
 TypeMetadata metadata(T)(T instance) {
 	TypeInfo typeInfo;
-	debug writeln("Getting metadata for " ~ T.stringof ~ ".");
 	static if(isVariant!(Unqual!T)) {
 		// TODO: Figure out how to check if an actual variant and not just the alias.
 		//version(logreflect) writeln("Passed in variant, using ", instance.type.text, " instead.");
