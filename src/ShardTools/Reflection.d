@@ -191,12 +191,18 @@ struct Symbol {
 
 	/// Returns the last specified attribute that matches type T exactly.
 	/// If no attribute is found matching that type, defaultValue is evaluated and returned.
-	T findAttribute(T)(lazy T defaultValue = T.init) {
+	/// For convenience, if the attribute contains only a single field, defaultValue may be that field.
+	/// In this case, the value of the field will be returned instead.
+	U findAttribute(T, U)(lazy U defaultValue = U.init) {
 		// TODO: Would be very nice if an attribute containing one argument could be used as just the argument.
 		// For example DisplayName could take in a default string and return a string.
+		static assert(is(U == T) || (T.tupleof.length == 1 && is(U == typeof(T.tupleof[0]))), 
+		              "Value for findAttribute must be either the attribute itself, "
+		            ~ "or in the case of attributes with a single field, the field it contains.");
 		foreach(ref attrib; retro(_attributes)) {
-			if(attrib.type == typeid(T))
-				return attrib.get!T;
+			if(attrib.type == typeid(T)) {
+				return attrib.get!U;
+			}
 		}
 		return defaultValue();
 	}
