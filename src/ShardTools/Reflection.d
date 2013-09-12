@@ -268,8 +268,6 @@ struct TypeMetadata {
 		this._instanceSize = instanceSize;
 		this._parent = parent;
 		this._converter = converter;
-		ClassInfo a;
-
 	} 
 
 	alias symbol this;
