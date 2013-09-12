@@ -132,6 +132,7 @@ enum SymbolModifiers {
 alias Variant function(ValueMetadata metadata, Variant instance) DataGetterFunction;
 alias void function(ValueMetadata metadata, Variant instance, Variant value) DataSetterFunction;
 alias Variant function(MethodMetadata, void*, Variant[] args) MethodInvokeFunction;
+alias Variant function(TypeMetadata metadata, Variant instance, ConversionKind) TypeConversionFunction;
 
 mixin(MakeException("ReflectionException"));
 
@@ -191,6 +192,8 @@ struct Symbol {
 	/// Returns the last specified attribute that matches type T exactly.
 	/// If no attribute is found matching that type, defaultValue is evaluated and returned.
 	T findAttribute(T)(lazy T defaultValue = T.init) {
+		// TODO: Would be very nice if an attribute containing one argument could be used as just the argument.
+		// For example DisplayName could take in a default string and return a string.
 		foreach(ref attrib; retro(_attributes)) {
 			if(attrib.type == typeid(T))
 				return attrib.get!T;
@@ -248,7 +251,7 @@ private:
 struct TypeMetadata {
 
 	this(Symbol symbol, size_t instanceSize, TypeInfo type, TypeKind kind, SymbolContainer children, 
-	     TypeInfo base, TypeInfo parent, TypeInfo[] interfaces) {
+	     TypeInfo base, TypeInfo parent, TypeInfo[] interfaces, TypeConversionFunction converter) {
 
 		this._symbol = symbol;
 		this._base = base;
@@ -258,9 +261,26 @@ struct TypeMetadata {
 		this._type = type;
 		this._instanceSize = instanceSize;
 		this._parent = parent;
+		this._converter = converter;
+		ClassInfo a;
+
 	} 
 
 	alias symbol this;
+
+	/// Converts the given variant into a variant containing an instance of this type.
+	/// If castFrom is called, a cast is attempted using $(D Variant.get).
+	/// Otherwise, a conversion is attempted using $(D Variant.coerce).
+	Variant castFrom(T)(T other) {
+		Variant v = other;
+		return _converter(this, v, ConversionKind.cast_);
+	}
+
+	/// ditto
+	Variant coerceFrom(T)(T other) {
+		Variant v = other;
+		return _converter(this, v, ConversionKind.coerce_);
+	}
 
 	/// Gets the symbol representing the type this metadata refers to.
 	@property Symbol symbol() pure nothrow {
@@ -321,6 +341,7 @@ private:
 	SymbolContainer _children;
 	TypeKind _kind;
 	Symbol _symbol;
+	TypeConversionFunction _converter;
 }
 
 /// Provides a means of storing symbols within a type or module.
@@ -709,12 +730,13 @@ struct PropertyValueMetadata {
 /// is not available, reflection data for type T will be returned instead.
 TypeMetadata metadata(T)(T instance) {
 	TypeInfo typeInfo;
-	static if(isVariant!T) {
+	debug writeln("Getting metadata for " ~ T.stringof ~ ".");
+	static if(isVariant!(Unqual!T)) {
 		// TODO: Figure out how to check if an actual variant and not just the alias.
 		//version(logreflect) writeln("Passed in variant, using ", instance.type.text, " instead.");
-		typeInfo = instance.type;
-	} else static if(is(T : TypeInfo)) {
-		typeInfo = instance;
+		typeInfo = cast()instance.type;
+	} else static if(is(Unqual!T : TypeInfo)) {
+		typeInfo = cast()instance;
 	} else {
 		static if(is(T == interface))
 			typeInfo = (cast(Object)instance).classinfo;
@@ -780,7 +802,8 @@ TypeMetadata createMetadata(T)() {
 		TypeInfo base = getBase!T;
 		size_t instanceSize = getSize!T;
 		TypeInfo[] interfaces = getInterfaces!T;
-		TypeMetadata result = TypeMetadata(symbol, instanceSize, type, kind, symbols, base, parent, interfaces);
+		TypeConversionFunction converter = &convertTo!(Unqual!T);
+		TypeMetadata result = TypeMetadata(symbol, instanceSize, type, kind, symbols, base, parent, interfaces, converter);
 		//synchronized(typeid(TypeMetadata)) {
 		_typeData[typeid(Unqual!T)] = StoredTypeMetadata(result);
 		//}
@@ -855,6 +878,8 @@ private MethodMetadata findMethodInternal(MethodMetadata[] methods, string metho
 			// Or else Variant.implicitConversionTargets.
 			// Just use something to not have to force exact types.
 			// Also fix qualified parameters (const, etc).
+			// Or Variant.convertsTo for checking if implicit conversion.
+			// Point being, lots of things can do it, so do it.
 			foreach(i, param; data.parameters) {
 				if(param.type != paramTypes[i]) {
 					falseParam = true;
@@ -918,10 +943,14 @@ Variant createInstance(ArgTypes...)(TypeMetadata metadata, ArgTypes args) {
 
 	} else {
 		if(method == MethodMetadata.init) {
-			if(ArgTypes.length == 0 && metadata.children._methods.any!(c=>c.name == "__ctor")) {
+			if(ArgTypes.length == 0 && !metadata.children._methods.any!(c=>c.name == "__ctor")) {
 				ClassInfo ci = cast(ClassInfo)metadata.type;
+				// We don't statically know what the result of ci.create is.
+				// So we have to use something which does.
+				// In this case, we can just use coerceFrom on the result since that function knows the static type.
 				Object instance = ci.create();
-				return Variant(instance);
+				return metadata.coerceFrom(instance);
+				//return Variant(instance);
 			} else
 				throw new ReflectionException("No constructor found that matches the arguments passed in.");
 		} else {
@@ -1058,7 +1087,7 @@ private ValueMetadata getField(T, string m)() {
 	static if(index == -1)
 		return getField!(BaseClassesTuple!T[0], m);
 	else {
-		TypeInfo type = typeid(typeof(T.tupleof[index]));
+		TypeInfo type = registerLazyLoader!(typeof(T.tupleof[index]));
 		size_t offset = T.tupleof[index].offsetof; //__traits(getMember, T, m).offsetof;
 		DataGetterFunction getter = &getFieldValue!(T, index);
 		DataSetterFunction setter = &setFieldValue!(T, index);
@@ -1100,7 +1129,7 @@ private MethodMetadata getMethod(alias func, T)() {
 		auto invoker = &(invokeMethod!(func, T, MethodParentKind.interface_));
 	else {
 		static assert(!__traits(isVirtualMethod, func), "Expected virtual method to have it's parent be either a class or interface.");
-		auto invoker = &(invokeMethod!(func, T, MethodParentKind.unknown));
+		auto invoker = &(invokeMethod!(func, T, MethodParentKind.unknown_));
 	}
 	TypeInfo returnType = registerLazyLoader!(ReturnType!func);
 	static if(__traits(isVirtualMethod, func)) {
@@ -1197,6 +1226,23 @@ private size_t getSize(T)() {
 		return T.sizeof;
 }
 
+private enum ConversionKind {
+	cast_,
+	coerce_
+}
+
+private Variant convertTo(T)(TypeMetadata metadata, Variant instance, ConversionKind kind) {
+	static if(is(Unqual!T == void)) {
+		throw new ReflectionException("Unable to cast to void.");
+	} else {
+		static if(__traits(compiles, instance.coerce!T)) {
+			if(kind == ConversionKind.coerce_)
+				return Variant(instance.coerce!T);
+		}
+		return Variant(instance.get!T);
+	}
+}
+
 private Variant invokeMethod(alias func, T, MethodParentKind parentType)(MethodMetadata metadata, void* instance, Variant[] args) {
 	if(args.length != arity!func)
 		throw new ReflectionException("Expected " ~ arity!func.text ~ " arguments to " ~ metadata.name ~ ", not " ~ args.length.text ~ ".");
@@ -1285,7 +1331,7 @@ private void* getVirtualFunctionPointer(MethodParentKind parentType)(void* insta
 }
 
 private enum MethodParentKind {
-	unknown,
+	unknown_,
 	interface_,
 	class_
 }
@@ -1784,6 +1830,27 @@ version(unittest) {
 		assert(largeData == largeVar.metadata);
 		assert(largeData.getValue("val", largeVar) == 4);
 		assert(largeData.invokeMethod("returnDouble", largeVar) == 8);
+	}
+
+	// Test dynamic type casting.
+	unittest {
+		auto intMetadata = createMetadata!int;
+		Variant initial = "3";
+		assert(intMetadata.coerceFrom(initial) == 3);
+		assertThrown(intMetadata.castFrom(initial));
+		assert(intMetadata.castFrom(Variant(cast(short)6)) == 6);
+
+		ReflectionTestInterface rti = new ReflectionTestClass();
+		auto metaRti = createMetadata!ReflectionTestInterface;
+		assertNotThrown(metaRti.castFrom(new ReflectionTestClass()));
+		assertNotThrown(metaRti.coerceFrom(new ReflectionTestClass()));
+
+		auto metaRte = createMetadata!ReflectionTestEnum;
+		assert(metaRte.coerceFrom("b") == ReflectionTestEnum.b);
+		auto metaRtbe = createMetadata!ReflectionTestBaseEnum;
+		assert(metaRtbe.coerceFrom("myVal2") == ReflectionTestBaseEnum.myVal2);
+
+		// TODO: This needs more tests. Particularly object -> interface -> base.
 	}
 
 	// Test module header example.
