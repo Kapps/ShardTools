@@ -46,7 +46,7 @@
 	---
 */
 module ShardTools.Reflection;
-version=logreflect;
+debug version=logreflect;
 import ShardTools.ExceptionTools;
 import std.range;
 import std.variant;

@@ -38,7 +38,7 @@ T getCommandLineOptions(T)(ref string[] args) {
 			debug writeln("Set value of " ~ name ~ " to " ~ arg ~ " (" ~ convertedVal.text ~ ").");
 		}
 		size_t oldLength = args.length;
-		getopt(args, config.caseInsensitive | config.passThrough, name, &setValue);
+		getopt(args, config.caseInsensitive, config.passThrough, name, &setValue);
 		if(args.length == oldLength && value.findAttribute!Required(Required(false)))
 			throw new MissingArgumentException("Required argument " ~ name ~ " was not found.");
 	}
@@ -57,11 +57,14 @@ string getHelpString(T)() {
 		dchar shortName = value.findAttribute!ShortName(ShortName(dchar.init));
 		if(shortName != dchar.init)
 			displayName = "-" ~ shortName.text ~ "|" ~ displayName;
-		displayName ~= "Default: " ~ value.getValue(defaultInstance).text;
-		string line = "[" ~ displayName ~ "] : " ~ description;
-		result ~= line;
+		string line = "[" ~ displayName ~ "]: " ~ description;
+		if(value.findAttribute!Required(Required(false)))
+			line ~= " (Required)";
+		else
+			line ~= " Default: " ~ value.getValue(defaultInstance).text;
+		result ~= line ~ "\r\n";
 	}
-	return result;
+	return result.length > 0 ? result[0..$-2] : result;
 }
 
 private auto usedValues(TypeMetadata metadata) {
