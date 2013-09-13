@@ -59,6 +59,8 @@ version(logreflect) import std.stdio;
 import core.stdc.string;
 import core.memory;
 import std.exception;
+import core.stdc.stdlib;
+import std.math;
 
 /// Indicates the protection level of a symbol, such as private or public.
 enum ProtectionLevel {
@@ -196,12 +198,9 @@ struct Symbol {
 	/// In this case, the value of the field will be returned instead.
 	U findAttribute(T, U)(lazy U defaultValue) 
 			if(is(T == U) || (__traits(compiles, T.tupleof) && T.tupleof.length == 1 && is(U == typeof(T.tupleof[0])))) {
-		/+static assert(is(U == T) || (T.tupleof.length == 1 && is(U == typeof(T.tupleof[0]))), 
-		              "Default value for findAttribute must be either the attribute itself, "
-		            ~ "or in the case of attributes with a single field, the field it contains.");+/
+
 		foreach(ref attrib; retro(_attributes)) {
 			if(attrib.type == typeid(T)) {
-				static assert(__traits(compiles, T.tupleof) || is(T == U));
 				static if(is(T == U))
 					return attrib.get!T;
 				else
@@ -213,7 +212,7 @@ struct Symbol {
 
 	/// ditto
 	T findAttribute(T)(lazy T defaultValue = T.init) {
-		return findAttribute!(T, T)(defaultValue);
+		return findAttribute!(T, T)(defaultValue());
 	}
 	
 	private string _name;
@@ -483,8 +482,9 @@ struct MethodMetadata {
 	/// In the case of static methods, instance may be null; otherwise instance must not be null.
 	/// For static methods the value of instance is ignored.
 	Variant invoke(InstanceType, T...)(InstanceType instance, T arguments) {
-		// TODO: Check if pure, non-static, and struct. If so, throw because not passed by ref.
-		// Maybe make version(logreflect) log it.
+		// TODO: Warn if impure, non-static, and struct not passed in by ref.
+		// Maybe with debugreflect.
+		// Just need to support things like isStatic first.
 		return invokeInternal(&instance, arguments);
 	}
 
@@ -499,7 +499,10 @@ struct MethodMetadata {
 			args[i] = arg;
 		// If it's a class, the context pointer should be the reference.
 		// Otherwise if it's a struct, a pointer to the struct.
-		static if(is(InstanceType == struct)) {
+		// If they just pass in the pointer directly, we'll use that though it's unsafe.
+		static if(isPointer!InstanceType) {
+			void* contextPtr = cast(void*)*instancePtr;
+		} else static if(is(InstanceType == struct)) {
 			static if(isVariant!InstanceType) {
 				enum storeIndex = fieldIndex!(InstanceType, "store");
 				void* contextPtr;
@@ -516,10 +519,13 @@ struct MethodMetadata {
 					contextPtr = interPtr - inter.offset;
 				} else {
 					if(instancePtr.type.tsize > instancePtr.size) {
-						auto contents = instancePtr.tupleof[storeIndex][];
-						contextPtr = *cast(void**)contents.ptr;
-					} else
-						contextPtr = cast(void*)instancePtr;
+						// For a large struct, Variant will store a pointer inside it's array.
+						auto contentsPtr = &instancePtr.tupleof[storeIndex];
+						contextPtr = *(cast(void**)contentsPtr);
+					} else {
+						auto contentsPtr = &instancePtr.tupleof[storeIndex];
+						contextPtr = cast(void*)contentsPtr;
+					}
 				}
 			} else {
 				void* contextPtr = cast(void*)instancePtr;
@@ -937,34 +943,47 @@ void setValue(T, InstanceType, ValueType)(T metadata, string valueName, Instance
 
 /// Creates a new instance of a type given metadata and arguments to pass in to the constructor.
 /// Bugs:
-/// 	Structs are not yet supported.
+/// 	At the moment creating an instance of a struct with arguments is not supported.
 Variant createInstance(ArgTypes...)(TypeMetadata metadata, ArgTypes args) {
 	if(metadata.kind != TypeKind.struct_ && metadata.kind != TypeKind.class_)
 		throw new NotSupportedException("Only structs and classes may be instantiated through createInstance.");
-	// TODO: We should be able to create instances of nested types if they're marked static.
-	//if(metadata.parent !is null)
-	//	throw new NotSupportedException("Unable to create instances of nested types.");
 	TypeInfo[] argTypes = templateArgsToTypeInfo!(ArgTypes);
 	MethodMetadata method = findMethod(metadata, "__ctor", argTypes);
+	if(method == MethodMetadata.init && ArgTypes.length > 0)
+		throw new ReflectionException("No constructor found that matches the arguments passed in.");
 	if(metadata.kind == TypeKind.struct_) {
-		// TODO: Accessing m_init for some structs causes a segfault.
-		// Figure out a work-around, or else fix this.
-		// Until then, can't support structs.
-		throw new NotSupportedException("Calling createInstance with a struct is not yet implemented.");
-		//ubyte[] data = new ubyte[metada.instanceSize];
-
+		void[] bytes;
+		// init() is null if all zeros.
+		// TODO: Is it safe to allocate this on the stack?
+		// Almost certain it is for the default constructor.
+		// But not sure about for when passing in arguments.
+		if(metadata.type.init.ptr !is null)
+			bytes = cast(void[])metadata.type.init.dup;
+		else
+			bytes = new void[metadata.instanceSize];
+		if(ArgTypes.length > 0) {
+			// We can just invoke the method on the byte array directly.
+			// The pointer will be correct after all, and saves us a coerceFrom.
+			// Unfortunately, can't seem to get this working.
+			// It's passing in the wrong argument into the constructor...
+			// The part about using bytes.ptr seems to be working okay though.
+			throw new ReflectionException("Calling createInstance for a struct using a non-default constructor is not yet supported.");
+			/+Variant resultInstance = method.invoke(bytes.ptr, args);
+			return resultInstance;+/
+		} else {
+			// If no constructor is used, use coerce to cast from void* to the type.
+			Variant instance = metadata.coerceFrom(bytes);
+			return instance;
+		}
 	} else {
-		if(method == MethodMetadata.init) {
-			if(ArgTypes.length == 0 && !metadata.children._methods.any!(c=>c.name == "__ctor")) {
-				ClassInfo ci = cast(ClassInfo)metadata.type;
-				// We don't statically know what the result of ci.create is.
-				// So we have to use something which does.
-				// In this case, we can just use coerceFrom on the result since that function knows the static type.
-				Object instance = ci.create();
-				return metadata.coerceFrom(instance);
-				//return Variant(instance);
-			} else
-				throw new ReflectionException("No constructor found that matches the arguments passed in.");
+		if(ArgTypes.length == 0) {
+			ClassInfo ci = cast(ClassInfo)metadata.type;
+			// We don't statically know what the result of ci.create is.
+			// So we have to use something which does.
+			// In this case, we can just use coerceFrom on the result since that function knows the static type.
+			Object instance = ci.create();
+			return metadata.coerceFrom(instance);
+			//return Variant(instance);
 		} else {
 			ubyte[] data = cast(ubyte[])GC.malloc(metadata.instanceSize)[0 .. metadata.instanceSize];
 			ClassInfo ci = cast(ClassInfo)metadata.type;
@@ -1048,6 +1067,7 @@ private SymbolContainer getSymbols(alias T)() {
 							// Decide how this should be handled.
 							// For the moment it's fine because we completely ignore const and such.
 							// Obviously that's not a great solution going forward however.
+							// Plus, the code could be different.
 							//assert(propertyGetter == MethodMetadata.init);
 							propertyGetter = method;
 						} else {
@@ -1145,12 +1165,7 @@ private MethodMetadata getMethod(alias func, T)() {
 	}
 	TypeInfo returnType = registerLazyLoader!(ReturnType!func);
 	static if(__traits(isVirtualMethod, func)) {
-		static if(__traits(compiles, __traits(getVirtualIndex, func)))
-			size_t vtblSlot = __traits(getVirtualIndex, func);
-		else {
-			pragma(msg, "Your compiler does not support __traits(getVirtualIndex). Invoking virtual methods will fail.");
-			size_t vtblSlot = 0;
-		}
+		size_t vtblSlot = __traits(getVirtualIndex, func);
 	} else {
 		size_t vtblSlot = 0;
 	}
@@ -1247,9 +1262,19 @@ private Variant convertTo(T)(TypeMetadata metadata, Variant instance, Conversion
 	static if(is(Unqual!T == void)) {
 		throw new ReflectionException("Unable to cast to void.");
 	} else {
-		static if(__traits(compiles, instance.coerce!T)) {
-			if(kind == ConversionKind.coerce_)
+		if(kind == ConversionKind.coerce_) {
+			static if(is(T == struct)) {
+				// Support converting from void[] to a struct.
+				// This is useful for creating instances of unknown structs.
+				// For example, in our own createInstance method.
+				void[]* arr = instance.peek!(void[]);
+				if(arr) {
+					T result = *(cast(T*)(*arr).ptr);
+					return Variant(result);
+				}
+			} else static if(__traits(compiles, instance.coerce!T))  {
 				return Variant(instance.coerce!T);
+			}
 		}
 		return Variant(instance.get!T);
 	}
@@ -1259,10 +1284,9 @@ private Variant invokeMethod(alias func, T, MethodParentKind parentType)(MethodM
 	if(args.length != arity!func)
 		throw new ReflectionException("Expected " ~ arity!func.text ~ " arguments to " ~ metadata.name ~ ", not " ~ args.length.text ~ ".");
 	staticMap!(Unqual, ParameterTypeTuple!func) params;
-	foreach(i, type; typeof(params)) {
+	foreach(i, type; typeof(params))
 		params[i] = args[i].get!type;
-	}
-	// TODO: Clean up return type stuffs.
+	// TODO: Clean up return type stuff.
 	static if(__traits(isStaticFunction, func)) {
 		static if(!is(ReturnType!func == void))
 			auto result = func(params);
@@ -1664,11 +1688,20 @@ version(unittest) {
 		ValueMetadata prop = metadata.findValue("stringValProperty");
 		assert(prop.getValue(instance) == "def");
 		assert(prop.propertyData.getter.name == "stringValProperty");
-		// TODO: Implement
-		//auto floatTesterMeta = createMetadata!ReflectionFloatStructTester;
-		//ReflectionFloatStructTester inst2 = floatTesterMeta.createInstance.get!ReflectionFloatStructTester;
-		//assert(inst2.a == 0);
-		//assert(isNaN(inst2.b));
+
+		auto floatTesterMeta = createMetadata!ReflectionFloatStructTester;
+		auto inst2 = floatTesterMeta.createInstance.get!ReflectionFloatStructTester;
+		assert(inst2.a == 0);
+		assert(isNaN(inst2.b));
+
+		// TODO: Support createInstance with args for structs.
+		/+auto attribTesterMeta = createMetadata!ReflectionTestAttribute;
+		auto inst4 = attribTesterMeta.createInstance(6).get!ReflectionTestAttribute;
+		assert(inst4.val == 6);
+
+		auto largeTesterMeta = createMetadata!ReflectionLargeStructTester;
+		auto inst3 = largeTesterMeta.createInstance(4).get!ReflectionLargeStructTester;
+		assert(inst3.val == 4);+/
 	}
 
 	// Basic class tester:
@@ -1792,6 +1825,8 @@ version(unittest) {
 		assert(field.findAttribute!int == 0);
 		auto attr = field.findAttribute!ReflectionTestAttribute;
 		assert(attr == ReflectionTestAttribute(3));
+		assert(field.findAttribute!ReflectionTestAttribute(6) == 3);
+		assert(field.findAttribute!(ReflectionUdaTest)(9) == 9);
 		auto prop = metadata.findValue("valProp");
 		Symbol getterSymbol = prop.propertyData.getter;
 		assert(getterSymbol.hasAttribute(typeid(int)));
