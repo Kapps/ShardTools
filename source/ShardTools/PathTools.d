@@ -203,6 +203,7 @@ public:
 
 	/// Queries the file system to check if the file located at the given path is a hidden file or within a hidden folder.
 	/// An exception is thrown if the file does not exist.
+	/// On non-Windows platforms, this checks if any of the components of the path start with a dot.
 	/// Params:
 	/// 	FilePath = The path to the file.
 	static bool IsHidden(in char[] FilePath) {
@@ -215,7 +216,7 @@ public:
 			if((FileAttribs & FILE_ATTRIBUTE_HIDDEN) != 0)
 				return true;
 			return false;
-		} else version(linux) {
+		} else version(Posix) {
 			foreach(const(char[]) Part; splitter(FilePath, '/')) {
 				string Trimmed = cast(string)strip(Part);
 				if(Trimmed.length == 0)
@@ -303,31 +304,8 @@ public:
 	
 	/// Returns the full path to the application executable file.
 	@property static string ApplicationPath() {	
-		if(_ApplicationPath)
-			return _ApplicationPath;		
-		synchronized(SyncLock) {
-			version(Windows) {																		
-				char[MAX_PATH] Buffer;
-				int ReturnSize = GetModuleFileNameA(null, Buffer.ptr, MAX_PATH);
-				enforce(ReturnSize > 0, "GetModuleFileNameA failed!");					
-				_ApplicationPath = Buffer[0..ReturnSize].idup;																		
-			}  else version(linux) {				
-				char[2048] Buffer;				
-				size_t NumChars = readLinkPosix("/proc/self/exe", Buffer.ptr, Buffer.length);
-				if(NumChars >= Buffer.length) {
-					char[] BiggerBuffer = new char[NumChars + 1];
-					size_t BiggerChars = readLinkPosix("/proc/self/exe", BiggerBuffer.ptr, BiggerBuffer.length);
-					enforce(BiggerChars < BiggerBuffer.length, "Error in getting application path. Your path may be too long.");
-					_ApplicationPath = BiggerBuffer[0..BiggerChars].idup;
-				} else
-					_ApplicationPath = Buffer[0..NumChars].idup;
-				if(_ApplicationPath[$-1] == '\0')
-					_ApplicationPath = _ApplicationDir[0..$-1];				
-				_ApplicationPath = MakeAbsolute(_ApplicationPath);
-			} else {
-				assert(0, "ApplicationPath not yet supported on platforms besides Linux and Windows.");
-			}
-		}
+		if(!_ApplicationPath)
+			_ApplicationPath = thisExePath();
 		return _ApplicationPath;
 	}
 
@@ -344,18 +322,12 @@ public:
 	
 	/// Sets the current working directory to the specified value.
 	static void SetWorkingDirectory(in char[] Path) {
-		synchronized(SyncLock) {
-			version(Windows) {				
-				char[] Copy = Terminate(Path);				
-				int Result = SetCurrentDirectoryA(Copy.ptr);				
-				enforce(Result != 0, "Result was " ~ to!string(Result) ~ " for SetWorkingDirectory with Path of \'" ~ to!string(Path) ~ "\'.");
-			} else {
-				chdir(Path);				
-			}
-		}
+		chdir(Path);
 	}
 
-	/// Gets the root drive for the specified path. On windows, this would return a result such as 'C:\' from 'C:\Test\Test2\Test.exe'.
+	/// Gets the root drive for the specified path. 
+	/// On Windows, this would return a result such as 'C:\' from 'C:\Test\Test2\Test.exe'.
+	/// On non-Windows systems this currently returns a single forward slash.
 	/// Params: Path = The path to get the root directory for.
 	/// Returns: The root directory for the specified path, or null if the path did not contain a root directory (a relative path).	Always returns "/" on non-Windows systems.
 	static inout(char[]) GetRoot(inout char[] Path) {		
