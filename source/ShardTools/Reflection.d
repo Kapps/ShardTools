@@ -1069,31 +1069,7 @@ private SymbolContainer getSymbols(alias T)() {
 			static if(isType!member) {
 				result._types ~= registerLazyLoader!(member);
 			} else static if(__traits(getOverloads, T, m).length > 0) {
-				MethodMetadata propertyGetter;
-				MethodMetadata[] propertySetters;
-				foreach(func; __traits(getOverloads, T, m)) {
-					auto method = getMethod!(func, T);
-					static if(functionAttributes!func & FunctionAttribute.property) {
-						// A getter is defined as a property that returns non-void and takes in zero parameters.
-						if(arity!func == 0 && !is(ReturnType!func == void)) {
-							// TODO: BUG: It is possible to have multiple getters.
-							// For example, one const and one non-const.
-							// Decide how this should be handled.
-							// For the moment it's fine because we completely ignore const and such.
-							// Obviously that's not a great solution going forward however.
-							// Plus, the code could be different.
-							//assert(propertyGetter == MethodMetadata.init);
-							propertyGetter = method;
-						} else {
-							// Otherwise, it's a setter.
-							propertySetters ~= method;
-						}
-					} else {
-						result._methods ~= method;
-					}
-				}
-				if(propertyGetter != MethodMetadata.init || propertySetters.length > 0)
-					result._values ~= getProperty!(T)(propertyGetter, propertySetters);
+				populateMethods!(T, m)(result);
 			} else {
 				version(logreflect) writeln("Skipped unsupported member " ~ T.stringof ~ "." ~ m ~ ".");
 			}
@@ -1102,6 +1078,38 @@ private SymbolContainer getSymbols(alias T)() {
 		}
 	}
 	return result;
+}
+
+private void populateMethods(T, string m)(ref SymbolContainer result) {
+	MethodMetadata propertyGetter;
+	MethodMetadata[] propertySetters;
+	foreach(func; __traits(getOverloads, T, m)) {
+		static if(isStaticConstructor!(func)) {
+			version(logreflect) writeln("Skipping static ctor for " ~ T.stringof ~ ".");
+		} else {
+			auto method = getMethod!(func, T);
+			static if(functionAttributes!func & FunctionAttribute.property) {
+				// A getter is defined as a property that returns non-void and takes in zero parameters.
+				if(arity!func == 0 && !is(ReturnType!func == void)) {
+					// TODO: BUG: It is possible to have multiple getters.
+					// For example, one const and one non-const.
+					// Decide how this should be handled.
+					// For the moment it's fine because we completely ignore const and such.
+					// Obviously that's not a great solution going forward however.
+					// Plus, the code could be different.
+					//assert(propertyGetter == MethodMetadata.init);
+					propertyGetter = method;
+				} else {
+					// Otherwise, it's a setter.
+					propertySetters ~= method;
+				}
+			} else {
+				result._methods ~= method;
+			}
+		}
+	}
+	if(propertyGetter != MethodMetadata.init || propertySetters.length > 0)
+		result._values ~= getProperty!(T)(propertyGetter, propertySetters);
 }
 
 private bool hasField(T, string m)() {
@@ -1535,6 +1543,12 @@ private template isType(T...) if(T.length == 1) {
 
 private template isField(alias T) {
 	enum isField = hasField!(__traits(parent, T), __traits(identifier, T));
+}
+
+private template isStaticConstructor(alias T) {
+	enum isStaticConstructor = 
+		__traits(identifier, T).startsWith("_sharedStaticCtor") || 
+		__traits(identifier, T).startsWith("_staticCtor");
 }
 
 private template isVariant(T) {
