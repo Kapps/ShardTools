@@ -5,7 +5,6 @@ import std.traits;
 import ShardTools.ExceptionTools;
 import std.exception;
 import core.stdc.string;
-import core.stdc.string;
 import std.typecons;
 
 mixin(MakeException("InvalidCastException", "The type stored in Untyped did not match the given type."));
@@ -52,20 +51,20 @@ struct Untyped {
 		TypeInfo ti = typeid(T);
 		TypeInfo_Class classType = cast(TypeInfo_Class)StoredType;
 		if(StoredType != ti) {
-			debug std.stdio.writefln("Trying to cast from %s to %s.", StoredType, ti);
+			//debug std.stdio.writefln("Trying to cast from %s to %s.", StoredType, ti);
 			if(cast(TypeInfo_Class)StoredType) {
-				debug std.stdio.writefln("Determined StoredType is class: %s.", cast(TypeInfo_Class)StoredType);
+				//debug std.stdio.writefln("Determined StoredType is class: %s.", cast(TypeInfo_Class)StoredType);
 				// First, check if our result can be casted to that type, if it's a class.
 				static if(is(T == class)) {
-					debug std.stdio.writefln("Determined T is class.");
+					//debug std.stdio.writefln("Determined T is class.");
 					if(auto casted = cast(T)Data) {
-						debug std.stdio.writefln("Successfully converted to %s: %s. Success.", typeid(T), cast(void*)casted);
+						//debug std.stdio.writefln("Successfully converted to %s: %s. Success.", typeid(T), cast(void*)casted);
 						value = casted; 
 						return true;
 					}
 				}
 			}
-			debug std.stdio.writefln("Failed get.");
+			//debug std.stdio.writefln("Failed get.");
 			return false;
 
 		}

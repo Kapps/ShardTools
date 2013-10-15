@@ -209,8 +209,8 @@ public:
 		CheckDisposed();
 		size_t TotalSize = T.sizeof * Value.length + uint.sizeof;
 		assert(TotalSize < uint.max);
-		void* BasePtr = &this._Data[_Position];
 		Reserve(TotalSize);
+		void* BasePtr = &this._Data[_Position];
 		*(cast(uint*)BasePtr) = cast(uint)Value.length;
 		memcpy(BasePtr + uint.sizeof, Value.ptr, cast(uint)Value.length * T.sizeof); 
 		_Position += TotalSize;
