@@ -58,7 +58,7 @@ T getCommandLineOptions(T)(ref string[] args, CommandLineFlags flags = CommandLi
 	bool commandInvoked = false;
 	foreach(method; getCommands(metadata)) {
 		string name = getArgName(method);
-		void storeCommand(string arg) {
+		void storeCommand(string name, string arg) {
 			commands ~= StoredCommand(method, arg);
 		}
 		getopt(args, config.caseInsensitive, config.passThrough, name, &storeCommand);
@@ -87,6 +87,10 @@ T getCommandLineOptions(T)(ref string[] args, CommandLineFlags flags = CommandLi
 			    "\t" ~ getCommandText(metadata).replace("\n", "\n\t")
 			);
 		}
+	}
+	foreach(comm; commands) {
+		if(comm.metadata.findAttribute!Command.flags & CommandFlags.argRequired && comm.arg.strip.length == 0)
+			handleError(flags, "The " ~ comm.metadata.name ~ " command requires an argument to be passed in.");
 	}
 	foreach(initializer; getInitializers(metadata))
 		initializer.invoke(instance);
@@ -234,7 +238,9 @@ enum CommandFlags {
 	allowMulti = 1,
 	/// This command should be invoked with no arguments if no other command is specified.
 	/// Only a single default command is set.
-	setDefault = 2
+	setDefault = 2,
+	/// Indicates that an argument is required for this command.
+	argRequired = 4
 }
 
 /// Indicates that the given letter can be used as an alternative to this argument name.
