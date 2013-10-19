@@ -61,7 +61,13 @@ T getCommandLineOptions(T)(ref string[] args, CommandLineFlags flags = CommandLi
 		void storeCommand(string name, string arg) {
 			commands ~= StoredCommand(method, arg);
 		}
-		getopt(args, config.caseInsensitive, config.passThrough, name, &storeCommand);
+		void storeCommandWithoutValue(string name) {
+			commands ~= StoredCommand(method, null);
+		}
+		if(method.parameters.length > 0)
+			getopt(args, config.caseInsensitive, config.passThrough, name, &storeCommand);
+		else
+			getopt(args, config.caseInsensitive, config.passThrough, name, &storeCommandWithoutValue);
 	}
 	if(commands.length > 1) {
 		string[] nonMultiNames = commands.map!(c=>c.metadata)
@@ -89,8 +95,8 @@ T getCommandLineOptions(T)(ref string[] args, CommandLineFlags flags = CommandLi
 		}
 	}
 	foreach(comm; commands) {
-		if(comm.metadata.findAttribute!Command.flags & CommandFlags.argRequired && comm.arg.strip.length == 0)
-			handleError(flags, "The " ~ comm.metadata.name ~ " command requires an argument to be passed in.");
+		if((comm.metadata.findAttribute!Command.flags & CommandFlags.argRequired) != 0 && comm.arg.strip.length == 0)
+			handleError(flags, "The " ~ comm.metadata.findAttribute!DisplayName(comm.metadata.name) ~ " command requires an argument to be passed in.");
 	}
 	foreach(initializer; getInitializers(metadata))
 		initializer.invoke(instance);
