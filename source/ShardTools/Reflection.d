@@ -787,7 +787,7 @@ TypeMetadata metadata(T)(T instance) {
 
 /// Generates reflection data for the given class, struct, union, or enum.
 /// Types that are referred to directly by the given type will be lazily loaded upon being accessed.
-TypeMetadata createMetadata(T)() {
+TypeMetadata createMetadata(Type)() {
 	// TODO: Decide how to handle this synchronization.
 	// typeid(T) does make sense sort of, but could lead to nasty deadlocks and is a not ideal choice.
 	// Yet we want a way to lock each individual type for when we generate metadata for it...
@@ -800,9 +800,10 @@ TypeMetadata createMetadata(T)() {
 	// For now, I doubt the concurrency is going to be too important so just lock a single thing (RWMutex it).
 	//synchronized(typeid(T)) {
 	// Below pragma could be useful in situations where you want to know exactly what's being compiled in.
+	alias T = Unqual!Type;
 	version(debugreflect) pragma(msg, "Compiling metadata for " ~ T.stringof);
 	synchronized(typeid(TypeMetadata)) {
-		TypeMetadata existing = getStoredExisting(typeid(Unqual!T), true);
+		TypeMetadata existing = getStoredExisting(typeid(T), true);
 		if(existing != TypeMetadata.init)
 			return existing;
 		static if(__traits(compiles, getType!T)) {
@@ -1062,11 +1063,12 @@ private SymbolContainer getSymbols(alias T)() {
 		} else static if(hasField!(T, m)) {
 			ValueMetadata value = getField!(T, m);
 			result._values ~= value;
-		} else static if(__traits(compiles, __traits(getMember, T, m))) {
+		} else static if(is(typeof(__traits(getMember, T, m))) && is(typeof(__traits(getMember, T, m)))) {
 			//version(logreflect) writeln("Processing member ", m, " on ", T.stringof, ".");
 			alias aliasSelf!(__traits(getMember, T, m)) member;
+			//pragma(msg, __traits(identifier, __traits(getMember, T, m)));
 			static if(isType!member) {
-				result._types ~= registerLazyLoader!(member);
+				result._types ~= registerLazyLoader!member;
 			} else static if(__traits(getOverloads, T, m).length > 0) {
 				populateMethods!(T, m)(result);
 			} else {
@@ -1524,11 +1526,7 @@ private TypeMetadata getStoredExisting(TypeInfo typeInfo, bool skipLoad) {
 }
 
 // Helper template to allow us to alias __traits(getMember, T, m).
-private template aliasSelf(alias T) {
-	alias T aliasSelf;
-}
-
-private template aliasSelf(T) {
+private template aliasSelf(T...) if(T.length == 1) {
 	alias T aliasSelf;
 }
 
