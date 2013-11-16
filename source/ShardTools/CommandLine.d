@@ -16,6 +16,7 @@ import std.array;
 import std.ascii;
 
 mixin(MakeException("CommandLineException", "An error occurred while validating input."));
+mixin(MakeException("ValidationException"));
 
 /// A bitwise enum to set optional flags for getting command line options.
 enum CommandLineFlags {
@@ -129,9 +130,13 @@ private void invokeCommand(T)(T instance, StoredCommand command) {
 		Variant parsed = typeData.coerceFrom(command.arg);
 		params[0] = parsed;
 	}
-	Variant result = command.metadata.invoke(instance, params);
-	if(result.type != typeid(void))
-		writeln(result);
+	try {
+		Variant result = command.metadata.invoke(instance, params);
+		if(result.type != typeid(void))
+			writeln(result);
+	} catch (ValidationException e) {
+		writeln(e.msg);
+	}
 }
 
 private struct StoredCommand {

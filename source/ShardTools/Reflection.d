@@ -41,7 +41,7 @@
 	assert(metadata.getValue("val", varInstance) == 3);
 	// Of course, can set values and invoke methods as well.
 	metadata.setValue("val", instance, 6);
-	assert(metadata.getValue("val", instance) == 6);
+	assert(metadata.getValue("val", insftance) == 6);
 	assert(metadata.invokeMethod("getSquare", instance, 4) == 16);
 	---
 */
@@ -294,7 +294,7 @@ struct TypeMetadata {
 	}
 
 	/// Gets the symbol representing the type this metadata refers to.
-	@property Symbol symbol() pure nothrow {
+	@property Symbol symbol() @safe pure nothrow {
 		return _symbol;
 	}
 
@@ -455,7 +455,7 @@ struct MethodMetadata {
 	}
 
 	/// Gets the symbol of the method this instance provides metadata for.
-	@property Symbol symbol() pure nothrow {
+	@property Symbol symbol() @safe pure nothrow {
 		return _symbol;
 	}
 
@@ -488,7 +488,7 @@ struct MethodMetadata {
 	}
 
 	/// ditto
-	Variant invoke(InstanceType, T...)(ref InstanceType instance, T arguments) if(is(T == struct)) {
+	Variant invoke(InstanceType, T...)(ref InstanceType instance, T arguments) if(is(InstanceType == struct)) {
 		return invokeInternal(&instance, arguments);
 	}
 
@@ -537,8 +537,9 @@ struct MethodMetadata {
 		} else static if(is(InstanceType == interface)) {
 			// If it's an interface, casting to void* is offset by the instance's offset value.
 			void* contextPtr = cast(void*)cast(Object)*instancePtr;
-		} else
+		} else {
 			void* contextPtr = cast(void*)(*instancePtr);
+		}
 		return _invoker(this, contextPtr, args);
 	}
 
@@ -583,7 +584,7 @@ struct ValueMetadata {
 	alias symbol this;
 
 	/// Gets the symbol that this instance provides metadata for.
-	@property Symbol symbol() pure nothrow {
+	@property Symbol symbol() @safe pure nothrow {
 		return _symbol;
 	}
 
@@ -744,6 +745,14 @@ struct PropertyValueMetadata {
 	private MethodMetadata[] _setters;
 }
 
+/// Provides a dynamic type that utilizes reflection metadata to forward all methods
+/// to the underlying type. While dynamic will work for D types using the $(D metadata) method,
+/// it's more useful with metadata generated from an external source such as a JSON parser.
+struct Dynamic {
+	Variant instance;
+	TypeMetadata metadata;
+}
+
 /// Returns metadata for the given object, if it's registered.
 /// If it's not registered, it will attempt to be generated if possible.
 /// Otherwise, TypeMetadata.init is returned.
@@ -754,8 +763,6 @@ struct PropertyValueMetadata {
 TypeMetadata metadata(T)(T instance) {
 	TypeInfo typeInfo;
 	static if(isVariant!(Unqual!T)) {
-		// TODO: Figure out how to check if an actual variant and not just the alias.
-		//version(logreflect) writeln("Passed in variant, using ", instance.type.text, " instead.");
 		typeInfo = cast()instance.type;
 	} else static if(is(Unqual!T : TypeInfo)) {
 		typeInfo = cast()instance;
@@ -766,6 +773,7 @@ TypeMetadata metadata(T)(T instance) {
 			typeInfo = typeid(instance);
 		version(logreflect) writeln("Got type info for ", typeInfo, " from ", instance);
 	}
+	// TODO: If the type is Dynamic, return that instead.
 	// TODO: Figure out a way to lock this; can't just use typeInfo because synchronized(typeid(int)) segfaults.
 	synchronized(typeid(TypeMetadata)) {
 		TypeMetadata existing = getStoredExisting(typeInfo, false);
@@ -1312,7 +1320,7 @@ private Variant convertTo(T)(TypeMetadata metadata, Variant instance, Conversion
 				return Variant(instance.coerce!T);
 			}
 		}
-		return Variant(instance.get!T);
+		return Variant(instance.as!T);
 	}
 }
 
@@ -1333,7 +1341,7 @@ private Variant invokeMethod(alias func, T, MethodParentKind parentType)(MethodM
 		this(Variant[] args) {
 			enforce(args.length == ArgTypes.length);
 			foreach(i, type; ArgTypes) {
-				auto val = args[i].get!type;
+				auto val = args[i].as!type;
 				params[i] = val;
 			}
 		}
@@ -1432,7 +1440,7 @@ private enum MethodParentKind {
 }
 
 private Variant getFieldValue(InstanceType, size_t fieldIndex)(ValueMetadata metadata, Variant instanceWrapper) {
-	InstanceType instance = instanceWrapper.get!InstanceType;
+	InstanceType instance = instanceWrapper.as!InstanceType;
 	// TODO: We can likely reduce template bloat if we can make the below work at compile-time instead of fieldIndex.
 	// For example, by manually making a switch statement that gets the right value.
 	// That might create more bloat than it saves though, not sure...
@@ -1445,15 +1453,15 @@ private Variant getFieldValue(InstanceType, size_t fieldIndex)(ValueMetadata met
 private void setFieldValue(InstanceType, size_t fieldIndex)(ValueMetadata metadata, Variant instanceWrapper, Variant valueWrapper) {
 	// TODO: Same as for getFieldValue. Remove fieldIndex template param.
 	//size_t fieldIndex = metadata.fieldData.index;
-	InstanceType* instance = instanceWrapper.get!(InstanceType*);
-	instance.tupleof[fieldIndex] = valueWrapper.get!(typeof(instance.tupleof[fieldIndex]));
+	InstanceType* instance = instanceWrapper.as!(InstanceType*);
+	instance.tupleof[fieldIndex] = valueWrapper.as!(typeof(instance.tupleof[fieldIndex]));
 }
 
 private Variant getPropertyValue(InstanceType)(ValueMetadata metadata, Variant instanceWrapper) {
 	auto method = metadata.propertyData.getter;
 	if(method == MethodMetadata.init)
 		throw new ReflectionException("No getter was found for this method.");
-	return method.invoke!(InstanceType)(instanceWrapper.get!(InstanceType));
+	return method.invoke!(InstanceType)(instanceWrapper.as!(InstanceType));
 }
 
 private void setPropertyValue(InstanceType)(ValueMetadata metadata, Variant instanceWrapper, Variant valueWrapper) {
@@ -1461,12 +1469,26 @@ private void setPropertyValue(InstanceType)(ValueMetadata metadata, Variant inst
 	auto method = findMethodInternal(setters, metadata.symbol.name, [valueWrapper.type]);
 	if(method == MethodMetadata.init)
 		throw new ReflectionException("Unable to find a setter that takes in a " ~ valueWrapper.type.text ~ ".");
-	method.invokeInternal!(InstanceType)(instanceWrapper.get!(InstanceType*), valueWrapper);
+	method.invokeInternal!(InstanceType)(instanceWrapper.as!(InstanceType*), valueWrapper);
 }
 
 private Variant getEnumConstant(T, string m)(ValueMetadata unused, Variant instance) {
 	// NOTE: cast instead of to, in order to prevent to!string(enum) which is wrong if base is string.
 	return Variant(cast(OriginalType!T)__traits(getMember, T, m));
+}
+
+// Helper to allow extensions to Variant get without going all the way to coerce.
+// For example, if FooBar derives from Foo and we have a variant storing Foo, we want
+// to be able to get it as an instance FooBar without risking a full coercion and string
+// conversions / parsing / such.
+private T as(T)(Variant inst) {
+	static if(is(typeof(inst.coerce!T))) {
+		if(cast(ClassInfo)inst.type) {
+			// We only do this for classes.
+			return inst.coerce!T;
+		}
+	}
+	return inst.get!T;
 }
 
 private TypeInfo[] templateArgsToTypeInfo(ArgTypes...)() {

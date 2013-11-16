@@ -1,8 +1,6 @@
 ﻿module ShardTools.TaskManager;
 private import std.exception;
 import ShardTools.Untyped;
-
-
 private import std.container;
 private import core.sync.condition;
 private import core.memory;
@@ -91,10 +89,10 @@ public:
 		_AwaitsPerThread = Value;
 	}*/
 		
-		/// Pushes the given task to the back of the task queue.
-		/// The task will be executed by any thread when available.
-		/// Optionally includes a stack size, which will be set to a default of PageSize * 4 if zero. Not using zero as the stack size results in larger overhead.
-		/// Returns an AsyncAction that will complete when the task is complete.	
+	/// Pushes the given task to the back of the task queue.
+	/// The task will be executed by any thread when available.
+	/// Optionally includes a stack size, which will be set to a default of PageSize * 4 if zero. Not using zero as the stack size results in larger overhead.
+	/// Returns an AsyncAction that will complete when the task is complete.	
 	AsyncAction Push(ReturnType, ArgType)(AsyncTask!(ReturnType, ArgType) Task, size_t StackSize = 0) {
 		TaskInfo* ti = CreateTaskInfo(Task, StackSize, new SignaledTask());		
 		PushTask(ti);
@@ -119,7 +117,6 @@ public:
 	private void PushTask(TaskInfo* ti) {
 		QueuedTasks.Enqueue(ti);
 		TaskThread Worker;
-		
 	}
 	
 	/// Disallows adding any further tasks, and destroys any threads that are finished executing tasks.
