@@ -263,6 +263,7 @@ T await(T = Untyped)(AsyncAction Action, ResumeStyle ResumeType, size_t StackSiz
 	// TODO: Special case the action being done already.
 	auto ManThread = cast(TaskManager.TaskThread)Thread.getThis();
 	auto ManFiber = cast(TaskManager.TaskFiber)Fiber.getThis();
+	enforce(&ManThread && ManFiber);
 	ManFiber.WasTaskYielded = true;
 	ManFiber.AwaitedAction = Action;
 	ManFiber.ResumeType = ResumeType;

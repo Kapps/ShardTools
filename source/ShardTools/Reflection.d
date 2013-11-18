@@ -41,7 +41,7 @@
 	assert(metadata.getValue("val", varInstance) == 3);
 	// Of course, can set values and invoke methods as well.
 	metadata.setValue("val", instance, 6);
-	assert(metadata.getValue("val", insftance) == 6);
+	assert(metadata.getValue("val", instance) == 6);
 	assert(metadata.invokeMethod("getSquare", instance, 4) == 16);
 	---
 */
@@ -745,13 +745,13 @@ struct PropertyValueMetadata {
 	private MethodMetadata[] _setters;
 }
 
-/// Provides a dynamic type that utilizes reflection metadata to forward all methods
+/+/// Provides a dynamic type that utilizes reflection metadata to forward all methods
 /// to the underlying type. While dynamic will work for D types using the $(D metadata) method,
-/// it's more useful with metadata generated from an external source such as a JSON parser.
+/// it's real use shines with metadata generated from an external source such as a JSON parser.
 struct Dynamic {
 	Variant instance;
 	TypeMetadata metadata;
-}
+}+/
 
 /// Returns metadata for the given object, if it's registered.
 /// If it's not registered, it will attempt to be generated if possible.

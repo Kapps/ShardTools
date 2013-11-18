@@ -4,6 +4,7 @@ import std.typecons;
 
 public import ShardTools.AsyncAction;
 import ShardTools.Untyped;
+import ShardTools.ExceptionTools;
 
 /// Gets a task that is completed only by a call to the Complete method.
 class SignaledTask : AsyncAction {
@@ -16,6 +17,8 @@ public:
 	
 	/// Notifies the signaled task that it has completed.
 	void SignalComplete(Untyped CompletionData) {
+		if(!HasBegun)
+			throw new InvalidOperationException("Unable to signal a task being complete before Start was called.");
 		this.NotifyComplete(CompletionType.Successful, CompletionData);
 	}
 

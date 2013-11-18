@@ -217,6 +217,8 @@ protected:
 	/// Notifies this AsyncAction that the operation was completed.
 	void NotifyComplete(CompletionType Status, Untyped CompletionData) {
 		enforce(Status == CompletionType.Successful || Status == CompletionType.Aborted);
+		if(!_HasBegun)
+			throw new InvalidOperationException("Unable to notify an AsyncAction completion prior to invoking Start on it.");
 		// Lock here for adding subscribers.
 		synchronized(StateLock) {
 			if(IsComplete)
