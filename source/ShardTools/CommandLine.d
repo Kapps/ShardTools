@@ -13,7 +13,7 @@ import ShardTools.ExceptionTools;
 import std.ascii;
 import std.string;
 import std.array;
-import std.ascii;
+import std.exception;
 
 mixin(MakeException("CommandLineException", "An error occurred while validating input."));
 mixin(MakeException("ValidationException"));
@@ -37,7 +37,9 @@ enum CommandLineFlags {
 /// If any input errors occur, an exception will be thrown.
 /// If a CommandLineException is thrown and flags allows it, a detailed description
 /// will have been printed to stdout and the exception will contain the same message.
+/// It is expected that the first parameter is the program name, as that parameter is discarded.
 T getCommandLineOptions(T)(ref string[] args, CommandLineFlags flags = CommandLineFlags.none) {
+	enforce(args.length > 0);
 	auto metadata = createMetadata!T;
 	T instance = metadata.createInstance().get!T;
 	foreach(value; usedValues(metadata)) {
@@ -102,7 +104,7 @@ T getCommandLineOptions(T)(ref string[] args, CommandLineFlags flags = CommandLi
 	foreach(initializer; getInitializers(metadata))
 		initializer.invoke(instance);
 	foreach(comm; commands) {
-		invokeCommand(instance, comm);
+		invokeCommand(instance, comm, args);
 	}
 	return instance;
 }
@@ -121,14 +123,17 @@ private void conPrint(CommandLineFlags flags, string[] lines...) {
 	}
 }
 
-private void invokeCommand(T)(T instance, StoredCommand command) {
+private void invokeCommand(T)(T instance, StoredCommand command, string[] remainingArgs) {
 	Variant[] params = new Variant[command.metadata.parameters.length];
-	if(params.length > 1)
-		throw new NotSupportedException("Commands with multiple parameters are not supported.");
-	if(params.length == 1) {
+	if(params.length > 2)
+		throw new NotSupportedException("Commands may contain up to two parameters: the argument passed in,"
+		                                "and optionally an array of unhandled arguments.");
+	if(params.length >= 1) {
 		TypeMetadata typeData = command.metadata.parameters[0].type.metadata;
 		Variant parsed = typeData.coerceFrom(command.arg);
 		params[0] = parsed;
+		if(params.length == 2)
+			params[1] = remainingArgs[1..$]; // Skip program name.
 	}
 	try {
 		Variant result = command.metadata.invoke(instance, params);
