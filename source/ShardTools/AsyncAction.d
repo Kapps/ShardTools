@@ -96,12 +96,13 @@ public:
 		return _HasBegun;
 	}
 	
-	/// Begins this operation asynchronously.	
-	void Start() {
+	/// Begins this operation asynchronously, returning this same instance.
+	AsyncAction Start() {
 		if(!cas(cast(shared)&_HasBegun, cast(shared)false, cast(shared)true))
 			throw new InvalidOperationException("The AsyncAction has already been started.");		
 		// Make sure we don't get garbage collected after the action has begun.
 		NativeReference.AddReference(cast(void*)this);
+		return this;
 	}	
 	
 	/// Gets the result of the completion for this command.

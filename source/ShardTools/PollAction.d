@@ -29,8 +29,8 @@ class PollAction : AsyncAction {
 	}
 
 	/// Begins polling this action.
-	override void Start() {
-		super.Start();
+	override PollAction Start() {
+		return cast(PollAction)super.Start();
 	}
 	
 private:

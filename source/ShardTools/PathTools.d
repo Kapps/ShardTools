@@ -91,10 +91,10 @@ public:
 	
 	unittest {
 		version(Windows) {
-			EnforceEqual(AddTrailingSlash("D:\\Test"), "D:\\Test\\".dup);
+			EnforceEqual(AddTrailingSeparator("D:\\Test"), "D:\\Test\\".dup);
 		} else {
-			EnforceEqual(AddTrailingSlash("/test"), "/test/".dup);
-			EnforceEqual(AddTrailingSlash("/test/"), "/test/".dup);
+			EnforceEqual(AddTrailingSeparator("/test"), "/test/".dup);
+			EnforceEqual(AddTrailingSeparator("/test/"), "/test/".dup);
 		}
 	}
 	

@@ -137,10 +137,10 @@ private:
 		assert(queue.Dequeue() == 2);
 		assert(queue.Count == 1);
 		int tmp;
-		assert(Queue.TryDequeue(tmp));
+		assert(queue.TryDequeue(tmp));
 		assert(queue.Count == 0);
 		assert(tmp == 3);
-		assert(!Queue.TryDequeue(tmp));
+		assert(!queue.TryDequeue(tmp));
 		assert(queue.Count == 0);
 		queue.Enqueue(4);
 		assert(queue.Peek() == 4);
