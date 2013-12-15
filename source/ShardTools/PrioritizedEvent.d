@@ -20,7 +20,6 @@ public:
 	/**
 	 * Executes the specified callback.
 	 * Params: 
-	 *	sender = The object invoking this callback.
 	 *	Params = The parameters for the callback.
 	 * Returns: Whether all of the callbacks were executed.
 	*/

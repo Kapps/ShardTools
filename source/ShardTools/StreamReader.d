@@ -17,8 +17,6 @@ class StreamReader  {
 
 public:
 	/// Initializes a new instance of the StreamReader object.
-	/// Params:
-	/// 
 	this(ubyte[] Data, bool Copy) {
 		if(Copy)
 			Data = Data.dup;	

@@ -146,7 +146,6 @@ public:
 	/// Returns the absolute path of the specified path.
 	/// Params: 
 	///		Path = The path to make absolute.
-	///		Base = Determines the base path to use when making the path absolute.
 	static inout(char[]) MakeAbsolute(inout char[] Path) {		 // TODO: Make thread safe.
 		version(Windows) {
 			char[] Copy = Terminate(Path);

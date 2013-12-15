@@ -1006,9 +1006,6 @@ struct Packer(Stream) if (isOutputRange!(Stream, ubyte) && isOutputRange!(Stream
 /**
  * Helper for $(D Packer) construction.
  *
- * Params:
- *  stream = the stream to write.
- *
  * Returns:
  *  a $(D Packer) object instantiated and initialized according to the arguments.
  */
@@ -2906,6 +2903,7 @@ struct Value
         this.type = type;
     }
 
+	/// ditto
     @safe
     this(typeof(null))
     {

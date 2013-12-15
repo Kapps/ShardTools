@@ -46,7 +46,7 @@ class SortedList(T) {
 	/// Adds the specified item to the collection.
 	/// Params: 
 	///		item = The item to add.
-	///		key = The key of the item to add.
+	///		Key = The key of the item to add.
 	void Add(T item, size_t Key) {
 		size_t Index = GetIndexForKey(Key);
 		_Length++;				

@@ -37,12 +37,8 @@ public:
 		return (cast(ubyte[])Data)[10..$-8];
 	}
 
-	/// Converts the data that was converted to deflate format with ToDeflate into gzip format.	The original data, or the crc and length of the original data, is required.
-	/// Params:
-	///		Data = The deflated data to convert.
-	/// 	Original = The non-compressed data.
-	/// 	OriginalCRC = The crc32 of the original data.
-	/// 	OriginalLength = The length of the original data.
+	/// Converts the data that was converted to deflate format with ToDeflate into gzip format.	
+	/// The original data, or the crc and length of the original data, is required.
 	/// BUGS:
 	///		This may or may not work properly for all devices.
 	/// 	The Android Browser does not seem to like things compressed with this method, so there is likely a bug somewhere.

@@ -103,9 +103,6 @@ static bool TrimToNull(ref char[] String, bool IncludeNull = false) {
 
 /// Trims the length of the specified string to equal to the size of the string up to the first found null terminator.
 /// Unlike TrimToNull, this method returns the string passed in, and instead WasTrimmed is set to false if the string was not trimmed.
-/// Params: 
-///		String = [inout] The string to alter the length of.
-///		IncludeNull = Whether to include the null terminator in the altered string.
 static char[] TrimReturn(ref char[] String, bool IncludeNull = false, bool* WasTrimmed = null) {
 	if(!IsTerminated(String)) {
 		if(WasTrimmed !is null)

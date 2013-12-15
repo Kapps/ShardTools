@@ -15,8 +15,6 @@ public:
 	}
 
 	/// Gets the element associated with the specified key.
-	/// Params:
-	///		Key = The key to get the element associated with.
 	Value Get(Key Key, lazy Value DefaultValue = Value.init) {		
 		Value* Result = (Key in Elements);
 		if(Result is null)
