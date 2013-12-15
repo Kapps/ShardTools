@@ -56,9 +56,7 @@ struct Untyped {
 				//debug std.stdio.writefln("Determined StoredType is class: %s.", cast(TypeInfo_Class)StoredType);
 				// First, check if our result can be casted to that type, if it's a class.
 				static if(is(T == class)) {
-					//debug std.stdio.writefln("Determined T is class.");
-					if(auto casted = cast(T)Data) {
-						//debug std.stdio.writefln("Successfully converted to %s: %s. Success.", typeid(T), cast(void*)casted);
+					if(auto casted = cast(T)cast(Object)Data) {
 						value = casted; 
 						return true;
 					}
@@ -69,7 +67,9 @@ struct Untyped {
 
 		}
 		static if(is(T == class)) {
-			value = cast(T)Data;
+			value = cast(T)cast(Object)Data;
+			if(value is null || typeid(value) != typeid(T))
+				return false;
 		} else {
 			static if(T.sizeof <= (void*).sizeof) {
 				value = cast(T)Data;
