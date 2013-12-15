@@ -57,7 +57,7 @@ struct CaoList(T) {
 unittest {
 	CaoList!(int) vals;
 	vals.push(3);
-	assert(val.length == 1);
+	assert(vals.length == 1);
 	int sum;
 	foreach(val; vals)
 		sum += val;
