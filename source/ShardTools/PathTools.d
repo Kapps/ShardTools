@@ -84,7 +84,7 @@ public:
 			assert(!CurrentDirectory.empty);
 			return cast(inout(char[]))AddTrailingSeparator(CurrentDirectory.dup);
 		}
-		if(isDirSeparator(FilePath[FilePath.length - 1]))
+		if(!isDirSeparator(FilePath[FilePath.length - 1]))
 			return cast(inout)(FilePath ~ DirSeparator);
 		return FilePath;
 	}
