@@ -1,6 +1,7 @@
-/// Provides basic, global, logging capabilities.
-/// While this module is not deprecated, it is likely to be deprecated once Phobos gets logging.
-/// The interface for this module is rather poor and not flexible.
+/// Provides basic, global, logging capabilities. This module will likely be deprecated after Phobos has logging.
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.Logger;
 
 private import std.conv;
@@ -38,6 +39,8 @@ private:
 }
 
 /// An abstract class used to write to a log.
+/// While this module is not deprecated, it is likely to be deprecated once Phobos gets logging.
+/// The interface for this module is rather poor and not flexible.
 abstract class Logger {
 public:
 	/// An event raised when a message is logged.

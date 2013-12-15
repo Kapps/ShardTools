@@ -1,11 +1,15 @@
-﻿module ShardTools.NativeReference;
+﻿/// A helper module used to keep a garbage collected reference to a desired object.
+/// $(RED This module should be considered deprecated; consider using GC.addRoot instead.)
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
+module ShardTools.NativeReference;
 private import core.memory;
 private import std.exception;
 private import std.container;
 
 
-/// A helper class used to keep a reference to a desired object, ensuring the garbage collector knows about it while it gets passed into non-GC code.
-/// $(RED This class should be considered deprecated; consider using GC.addRoot instead.)
+/// A helper module used to keep a reference to a desired object, ensuring the garbage collector knows about it while it gets passed into non-GC code.
 class NativeReference  {
 	
 	public static:

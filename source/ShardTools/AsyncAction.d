@@ -1,4 +1,8 @@
-﻿module ShardTools.AsyncAction;
+﻿/// Provides a base class for all asynchronous operations to implement.
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
+module ShardTools.AsyncAction;
 private import core.atomic;
 import ShardTools.Untyped;
 private import std.functional;
@@ -28,6 +32,10 @@ enum CompletionType {
 mixin(MakeException("ActionAbortedException", "Attempted to get the results of an action that was aborted prior to completion."));
 
 /// Provides information about an action that executes asynchronously.
+/// An AsyncAction is the base class for any actions that can execute asynchronously.
+/// It can be started and aborted, as well as completed.
+/// In the future, AsyncActions will likely be linked to the TaskManager for Fiber support, allowing
+/// them to execute in the background yet appear as if they completes synchronously.
 abstract class AsyncAction  {
 	
 public:

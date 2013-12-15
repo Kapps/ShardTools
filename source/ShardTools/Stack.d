@@ -1,4 +1,5 @@
-﻿module ShardTools.Stack;
+﻿/// Provides a LIFO stack that is not thread-safe. The $(D ConcurrentStack) may be used for a thread-safe version.
+module ShardTools.Stack;
 private import core.memory;
 private import core.atomic;
 private import std.exception;

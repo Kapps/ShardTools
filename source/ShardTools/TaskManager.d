@@ -1,4 +1,9 @@
-﻿module ShardTools.TaskManager;
+﻿/// Allows various AsyncActions to be scheduled for running, including fiber execution.
+/// $(RED This module is not yet implemented.)
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
+module ShardTools.TaskManager;
 private import std.exception;
 import ShardTools.Untyped;
 private import std.container;

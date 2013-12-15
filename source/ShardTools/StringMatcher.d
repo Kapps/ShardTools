@@ -1,4 +1,8 @@
-﻿module ShardTools.StringMatcher;
+﻿/// Allows various methods of efficiently matching a string, such as a regex or exact match.
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
+module ShardTools.StringMatcher;
 private import std.functional;
 public import std.regex;
 

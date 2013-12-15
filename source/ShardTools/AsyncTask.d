@@ -1,4 +1,8 @@
-﻿/// $(RED This module is not yet implemented, and may be completely redone.)
+﻿/// Provides a task that can be run asynchronously without the full overhead of an $(D AsyncAction).
+/// $(RED This module is not yet implemented, and may be completely redone.)
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.AsyncTask;
 public import ShardTools.AsyncAction;
 
@@ -6,7 +10,8 @@ public import ShardTools.AsyncAction;
 // Use Untyped, make it an AsyncAction in some way, etc.
 // Maybe just use a wrapper around it to make it an AsyncAction, since should still be able to use it as regular light-weight otherwise.
 
-/// Provides a task that can be run asynchronously.
+/// Provides a task that can be run asynchronously without the full overhead of an $(D AsyncAction).
+/// $(RED This module is not yet implemented, and may be completely redone.)
 @disable struct AsyncTask(ReturnType, ArgType...) if(is(ReturnType == void) || is(ReturnType == Variant)) {
 
 public:

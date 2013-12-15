@@ -1,4 +1,10 @@
-﻿module ShardTools.MemoryCache;
+﻿/// Provides the base class for memory caches.
+/// Multiple memory caches are likely to exist in the future, such as a local one or memcached connector.
+/// At the moment though, nothing in this module is implemented.
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
+module ShardTools.MemoryCache;
 private import std.functional;
 import std.datetime;
 import ShardTools.MessagePack;

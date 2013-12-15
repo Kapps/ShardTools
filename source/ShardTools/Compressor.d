@@ -1,4 +1,9 @@
-﻿module ShardTools.Compressor;
+﻿/// Provides basic compression functions for various formats.
+/// $(RED The implementation of this module is buggy and the module will likely be scrapped.)
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
+module ShardTools.Compressor;
 import etc.c.zlib;
 import std.zlib;
 import std.c.stdlib;

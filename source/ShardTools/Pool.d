@@ -1,13 +1,19 @@
-﻿module ShardTools.Pool;
+﻿/// Provides a basic reusable pool of objects with a default instance.
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
+module ShardTools.Pool;
 private import ShardTools.List;
 private import ShardTools.Stack;
 private import ShardTools.ConcurrentStack;
 
 /// A class used to provide simple pooling of objects.
-/// This class is not thread-safe, but a thread-local default instance may be retrieved with the $(D, Default) property.
+/// This class is thread-safe and has a global default instance.
 class Pool(T) {
 
 public:
+
+	// TODO: Should be able to call an initialize function on the pooled object.
 
 	static this() {
 		_Default = new Pool!(T)(0);

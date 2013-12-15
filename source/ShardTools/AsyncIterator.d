@@ -1,4 +1,7 @@
-﻿/// $(RED This module is not yet implemented.)
+﻿/// Provides an AsyncAction that iterates over a foreach capable object in an asynchronous manner.
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.AsyncIterator;
 
 import ShardTools.AsyncAction;
@@ -9,6 +12,7 @@ version(None) {
 /// The iterator may continue iterating even when the local scope ends.
 /// The iterator uses the default opApply on the input type, but attempts to avoid using the entire range when not necessary.
 /// Because of the asynchronous manner of this iterator, break operations are not precise.
+/// $(RED This module is not yet implemented and may be scrapped.)
 public class AsyncIterator : AsyncAction {
 
 public:

@@ -1,10 +1,15 @@
-﻿module ShardTools.AsyncRange;
+﻿/// Provides a single producer single consumer asynchronous range.
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
+module ShardTools.AsyncRange;
 import std.exception;
 import ShardTools.SignaledTask;
 import std.parallelism;
 
 /// Provides an asynchronous buffered input range that can be consumed
 /// by a single consumer, returning an AsyncAction for when the range is depleted.
+/// $(RED This module is not yet implemented.)
 class AsyncRange(T) {
 
 	/// Creates a new AsyncRange with the given delegate used to produce

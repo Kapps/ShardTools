@@ -31,6 +31,7 @@
 * of this file under the terms of either the MPL or the GPL.
 *
 * ***** END LICENSE BLOCK ***** */
+/// Provides helper functions to save images.
 /// $(Red License Note)
 /// This module is licensed under the MPL license due to the savePng method.
 module ShardTools.ImageSaver;
@@ -47,7 +48,8 @@ import std.file;
 // This function is taken from CyberShadow's ae library, from the Image class.
 // The Image class is licensed MPL, thus this file is as well.		
 /// Saves an array of colours to a file with the specified width and height.
-/// $(RED License):
+/// Note that this function has a different license than most of this library.
+/// License:
 /// 	This method was taken from Vladimir Panteleev's ae library and slightly changed to use ShardTools.Color.
 /// 	All credits go to Vladimir Panteleev (CyberShadow).
 /// 	The license for this function is MPL.

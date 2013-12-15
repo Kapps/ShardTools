@@ -1,4 +1,8 @@
-﻿/// $(RED This module has been largely replaced by DataSources.)
+﻿/// Provides a one-way buffered Stream for IO operations.
+/// $(RED This module has been largely replaced by DataSources and will not be completed.)
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.Stream;
 
 version(None) {

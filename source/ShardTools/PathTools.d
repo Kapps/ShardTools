@@ -1,3 +1,8 @@
+/// Provides helper functions for dealing with paths in a cross-platform consistent manner.
+/// This module is generally being phased out now that std.path is improved.
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.PathTools;
 import std.algorithm;
 import ShardTools.StringTools;

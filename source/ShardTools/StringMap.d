@@ -1,4 +1,8 @@
-﻿module ShardTools.StringMap;
+﻿/// Provides access to a map of case insensitive strings with parsing capabilities.
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
+module ShardTools.StringMap;
 import std.stdio : writeln;
 private import std.exception;
 private import std.algorithm;

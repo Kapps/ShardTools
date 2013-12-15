@@ -45,6 +45,9 @@
 	assert(metadata.invokeMethod("getSquare", instance, 4) == 16);
 	---
 */
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.Reflection;
 import ShardTools.ExceptionTools;
 import std.range;

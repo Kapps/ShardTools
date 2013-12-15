@@ -4,6 +4,9 @@
 /// Watchers may be used to keep track of problems that occur.
 /// Problems can depend on other problems, and thus be chained.
 /// This module is not yet implemented.
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.Problem;
 private import std.algorithm;
 private import std.range;

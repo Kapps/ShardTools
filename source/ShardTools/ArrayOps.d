@@ -4,6 +4,9 @@
 /// This module is stable in design, but not tested enough to be stable in implementation. Many methods are completely untested.
 /// There was a time when this module could have been considered useful and a performance booster, but that is no longer the case.
 /// New code should use std.algorithm instead of this module.
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.ArrayOps;
 private import std.traits;
 import std.parallelism;

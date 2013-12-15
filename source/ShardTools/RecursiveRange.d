@@ -1,4 +1,8 @@
-﻿module ShardTools.RecursiveRange;
+﻿/// Provides a range that recurses over an existing range to get it's values.
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
+module ShardTools.RecursiveRange;
 private import std.exception;
 private import std.functional;
 private import std.range;

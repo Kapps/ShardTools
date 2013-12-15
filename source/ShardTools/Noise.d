@@ -1,10 +1,14 @@
-﻿module ShardTools.Noise;
+﻿/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
+module ShardTools.Noise;
 private import std.math;
 private import std.traits;
 private import std.random;
 private import std.array;
 
 // TODO: This class just seems flat out wrong for a lot of things?
+// TODO: These should be global functions as well, not a static class.
 
 /// Provides generators for creating random noise, such as perlin noise.
 /// $(RED The implementation of this class is poor, and thus is disabled until improved.)

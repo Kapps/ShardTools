@@ -1,10 +1,11 @@
-﻿module ShardTools.Map;
+﻿/// A dictionary class used to lookup an element by key.
+module ShardTools.Map;
 
 private import std.string;
 
 /// A dictionary class used to lookup an element by key.
 /// For the moment, this class is merely a wrapper around an associative array.
-/// In the future, it should support custom hash functions and equality comparisons.
+/// $(RED This class should be considered deprecated as it provides no benefits over an AA.)
 class Map(Key, Value) {
 
 public:

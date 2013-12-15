@@ -1,3 +1,7 @@
+/// Represents a collection of delegates to be invoked dynamically.
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.Event;
 private import core.memory;
 private import ShardTools.BufferPool;
@@ -9,7 +13,7 @@ private import ShardTools.List;
 /// This class is thread safe.
 alias Event!(void) ActionEvent;
 
-/// Represents a collection of delegates to be invoked dynamically.
+/// ditto
 class Event(RetValue, Params...) {		
 
 	alias RetValue delegate(Params) CallbackType;
@@ -51,7 +55,7 @@ class Event(RetValue, Params...) {
 	}+/
 
 	Select!(is(RetValue == void), void, RetValue[]) Execute(Params Parameters) {		
-		// Fun! Turns out, doing this is actually creating a huge amount of garbage.
+		// Turns out, doing this is actually creating a huge amount of garbage.
 		// So... we are going to use a whole lot of manual memory management and hacks.
 		// This could all be solved by a thread-safe singly linked list... but that's more complicated and may not solve the issue really.
 		// TODO: Eliminate this. It was a stupid attempt at solving a problem that doesn't really exist.

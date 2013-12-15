@@ -1,3 +1,7 @@
+/// Contains a Timer class that is deprecated with the addition of std.datetime.StopWatch.
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.Timer;
 import std.conv;
 import std.datetime;

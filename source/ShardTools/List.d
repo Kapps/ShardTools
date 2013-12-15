@@ -1,5 +1,8 @@
 ﻿/// Provides a simple array-list implementation.
 /// $(RED This module should be considered deprecated.)
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.List;
 private import ShardTools.IList;
 import std.conv;

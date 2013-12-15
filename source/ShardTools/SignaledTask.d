@@ -1,4 +1,8 @@
-﻿module ShardTools.SignaledTask;
+﻿/// Provides an AsyncAction that gets signaled when it should complete.
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
+module ShardTools.SignaledTask;
 public import ShardTools.Event;
 import std.typecons;
 

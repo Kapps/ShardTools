@@ -1,4 +1,9 @@
-﻿module ShardTools.DateParse;
+﻿/// Provides helpers for parsing specific date formats.
+/// $(RED The implementation of this module is sub-par, and it should be considered deprecated.)
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
+module ShardTools.DateParse;
 import std.conv;
 import std.datetime;
 import std.string;
@@ -6,12 +11,11 @@ import std.string;
 import ShardTools.ArrayOps;
 
 /// Provides helpers for parsing specific date formats.
-/// $(RED The implementation of this class is sub-par, and it should be considered deprecated.)
 class DateParse {
 
 public:
 
-	/// Converts thie DateTime to a RFC822/1123 string.
+	/// Converts a DateTime to an RFC822/1123 string.
 	static string toHttp(DateTime DT) {		
 		int DayWeekNum = to!int(DT.dayOfWeek);		
 		string Result = WeekDayNames[DayWeekNum] ~ ", ";		

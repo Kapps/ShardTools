@@ -1,4 +1,9 @@
-﻿module ShardTools.ICollection;
+﻿/// Provides a basic collection interface.
+/// $(RED This module comes from a time of less familiarity with D, and should be considered deprecated.)
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
+module ShardTools.ICollection;
 import ShardTools.List;
 import std.conv;
 import std.exception;
@@ -7,7 +12,6 @@ import std.exception;
 // Also, really, the point of this was to not need index, yet there's a Set.
 
 /// An interface for a mutable collection accessible by index.
-/// $(RED This module comes from a time of less familiarity with D, and should be considered deprecated.)
 interface ICollection(T) {
 
 	/// Gets the number of elements in this collection.

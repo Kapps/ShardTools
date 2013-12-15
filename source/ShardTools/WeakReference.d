@@ -1,4 +1,6 @@
-﻿module ShardTools.WeakReference;
+﻿/// Allows access to a weak reference of memory that can be garbage collected.
+/// $(RED This module is incomplete.)
+module ShardTools.WeakReference;
 private import std.conv;
 private import std.exception;
 import ShardTools.ExceptionTools;

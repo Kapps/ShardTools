@@ -1,6 +1,8 @@
 /// Provides setting data that utilize std.getopt with support for generating entire structs and displaying help data.
-/// Methods within this module accept the UDAs of displayName, ignore, and description.
-/// $(RED This module is not yet implemented.)
+/// Methods within this module accept various UDAs implemented in this class for determining operations.
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.CommandLine;
 import ShardTools.Reflection;
 import ShardTools.Udas;

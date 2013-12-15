@@ -1,4 +1,6 @@
-﻿module ShardTools.Untyped;
+﻿/// Contains a struct for simple wrapping of data in an untyped manner.
+/// Generally this is not as safe or flexible as std.Variant, but is much more efficient.
+module ShardTools.Untyped;
 private import core.memory;
 import std.conv;
 import std.traits;

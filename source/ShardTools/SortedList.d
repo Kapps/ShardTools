@@ -1,3 +1,4 @@
+/// Provides a sorted array list. This module is deprecated as the implementation is poor and unnecessary.
 module ShardTools.SortedList;
 private import std.exception;
 import std.array;

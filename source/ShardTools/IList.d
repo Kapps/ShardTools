@@ -1,4 +1,9 @@
-﻿module ShardTools.IList;
+﻿/// Provides an interface for a collection that is ordered and indexable.
+/// $(RED This interface should be considered deprecated and no longer used in new code.)
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
+module ShardTools.IList;
 import ShardTools.ICollection;
 
 // TODO: Phase this out and remove it.

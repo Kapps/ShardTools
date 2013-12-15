@@ -1,4 +1,5 @@
-﻿module ShardTools.SpinLock;
+﻿/// Provides a light-weight spinlock that is not re-entrant and has no ordering.
+module ShardTools.SpinLock;
 private import core.thread;
 private import core.atomic;
 
@@ -26,7 +27,7 @@ private:
 	
 }
 
-/// Provides a monitor that continuously attempts to acquire a lock until it succeeds.
+/// Provides a lock that continuously attempts to acquire a lock until it succeeds.
 /// Unlike Mutex, a single unlock will make the SpinLock available, until another lock call is made.
 /// This means that SpinLock's are not re-entrant. SpinLocks also do not have any guaranteed ordering.
 /// The SlimSpinLock type does not need to be initialized, and instead is default initialized to available.

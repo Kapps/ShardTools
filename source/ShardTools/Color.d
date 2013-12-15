@@ -1,10 +1,15 @@
+/// Represents a Color in RGBA format, with one byte per channel.
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.Color;
 
 version(ShardMath) {
 	private import ShardMath.Vector;
 }
 
-/// Represents a color with four components ranging from 0 to 255.
+/// Represents a Color in RGBA format, with one byte per channel.
+/// This struct is simple with no overhead, but lacks more complex operations.
 struct Color {
 	
 	/**

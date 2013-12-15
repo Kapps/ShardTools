@@ -1,4 +1,8 @@
-﻿module ShardTools.LinkedList;
+﻿/// Provides a simple implementation of a doubly linked list.
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
+module ShardTools.LinkedList;
 private import std.functional;
 
 // TODO: Change everything here to malloc and free for nodes.

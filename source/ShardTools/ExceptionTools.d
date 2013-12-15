@@ -1,4 +1,7 @@
 /// Provides basic mixins for helping create new exceptions.
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.ExceptionTools;
 
 mixin(MakeException("InvalidOperationException", "The performed operation was considered invalid for the present state."));

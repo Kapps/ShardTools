@@ -1,4 +1,5 @@
-﻿module ShardTools.TaskRepeater;
+﻿/// Contains a helper class that allows tasks to be continuously repeated until completion.
+module ShardTools.TaskRepeater;
 private import core.thread;
 private import ShardTools.ConcurrentStack;
 private import ShardTools.LinkedList;

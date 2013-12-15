@@ -1,3 +1,8 @@
+/// Provides a class similar to Event but ordered and not thread-safe.
+/// The implementation of this class is very poor and is generally not useable.
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.PrioritizedEvent;
 
 import ShardTools.SortedList;

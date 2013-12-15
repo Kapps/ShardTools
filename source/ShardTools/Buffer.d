@@ -1,4 +1,8 @@
-﻿module ShardTools.Buffer;
+﻿/// Provides a reusable buffer of memory designed for efficient writes.
+/// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
+/// Authors: Ognjen Ivkovic
+/// Copyright: © 2013 Ognjen Ivkovic
+module ShardTools.Buffer;
 private import std.algorithm;
 private import std.traits;
 private import std.array;
@@ -10,6 +14,7 @@ private import std.c.string;
 
 
 /// Provides a reusable buffer of memory designed for efficient writes.
+/// This class is generally used with the $(D BufferPool) rather than being created directly.
 final class Buffer  {
 	
 	// TODO: Allow support for creating the array by using pages of memory.
