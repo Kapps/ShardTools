@@ -12,7 +12,7 @@ import core.atomic;
 /// This list does not need to be initialized, making it particularly useful for storing
 /// global data, such as registered providers, without having to worry about locking / initialization.
 struct CaoList(T) {
-abc
+	
 	// TODO: Can we give this a range interface?
 
 	/// Returns the number of elements contained within the list.
