@@ -133,14 +133,10 @@ private:
 	shared size_t CurrentSize;	
 	shared size_t StoredBuffers;	
 
-	size_t IndexForBuffer(size_t NumBytes) {
+	pure static size_t IndexForBuffer(size_t NumBytes) {
 		if(NumBytes == 0)
 			return 0;
-		real Log = log2(NumBytes);
-		// The % 2 is there for floating point precision issues. Not sure if it's needed, nor if it's a good idea...
-		// Still, it leans towards a larger buffer than necessary, which is fine. It's also rare that it'd affect the result.
-		// TODO: Instead of the approach currently used, which is flat out incorrect (though works), just use a bit op to calculate it.
-		return Log - cast(size_t)Log == 0 && NumBytes % 2 == 0 ? cast(int)Log : cast(int)Log + 1;
+		return cast(size_t)ceil(log2(NumBytes));
 	}
 
 	void OnBufferRemoved(Buffer buff) {				
@@ -165,4 +161,13 @@ private:
 	// While we don't necessarily need all of these buffers, we'd have some complications with MaxSize being set if we just calculated the amount needed at runtime.
 	// It's not much overhead anyways considering you usally only have one buffer pool.
 	BufferCollection[NumBuffers] Buffers;	
+
+	unittest {
+		assert(IndexForBuffer(0) == 0);
+		assert(IndexForBuffer(2) == 1);
+		assert(IndexForBuffer(3) == 2);
+		assert(IndexForBuffer(pow(2, 16) - 1) == 16);
+		assert(IndexForBuffer(pow(2, 16)) == 16);
+		assert(IndexForBuffer(pow(2, 16) + 1) == 17);
+	}
 }
