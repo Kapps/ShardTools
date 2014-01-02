@@ -33,6 +33,4 @@ protected:
 	override void PerformAbort() {
 		// No action is needed.
 	}
-
-private:
 }

@@ -32,11 +32,6 @@ class PollAction : AsyncAction {
 		}
 	}
 
-	/// Begins polling this action.
-	override PollAction Start() {
-		return cast(PollAction)super.Start();
-	}
-	
 private:
 	void delegate() _PollFunction;
 

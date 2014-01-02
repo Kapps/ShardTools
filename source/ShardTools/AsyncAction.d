@@ -52,7 +52,6 @@ public:
 	this() {
 		_TimeoutDuration = dur!"hnsecs"(0);
 		_StartTime = Clock.currTime();
-		StateLock = new Mutex();
 	}
 	
 	/// Indicates whether this action will ever time out if not completed within TimeoutTime.
@@ -105,12 +104,16 @@ public:
 	}
 	
 	/// Begins this operation asynchronously, returning this same instance.
-	AsyncAction Start() {
-		if(!cas(cast(shared)&_HasBegun, cast(shared)false, cast(shared)true))
-			throw new InvalidOperationException("The AsyncAction has already been started.");		
-		// Make sure we don't get garbage collected after the action has begun.
-		NativeReference.AddReference(cast(void*)this);
-		return this;
+	T Start(this T)() {
+		synchronized(this) {
+			if(_HasBegun)
+				throw new InvalidOperationException("The AsyncAction has already been started.");		
+			// Make sure we don't get garbage collected after the action has begun.
+			NativeReference.AddReference(cast(void*)this);
+			_HasBegun = true;
+			PerformStart();
+			return cast(T)this;
+		}
 	}	
 	
 	/// Gets the result of the completion for this command.
@@ -130,7 +133,7 @@ public:
 	/// 	Callback = The callback to invoke.
 	void NotifyOnComplete(Untyped State, CompletionCallback Callback) {
 		bool InvokeImmediately = false;
-		synchronized(StateLock) {
+		synchronized(this) {
 			if(!IsComplete)
 				CompletionSubscribers ~= cast(typeof(CompletionSubscribers[0]))tuple(State, Callback);
 			else
@@ -149,7 +152,7 @@ public:
 	/// Optionally, Abort can take in a result to provide additional information about the error or a progress update.
 	/// The result is then available through the CompletionData property.
 	void Abort(Untyped Result = Untyped.init) {
-		synchronized(StateLock) {
+		synchronized(this) {
 			if(!CanAbort)
 				throw new NotSupportedException("Attempted to abort an AsyncAction that does not support the Abort operation.");
 			if(Status != CompletionType.Incomplete)
@@ -213,6 +216,9 @@ protected:
 	/// Implement to handle the actual cancellation of the action.
 	/// If an action does not support cancellation, CanAbort should return false, and this method should throw an error.
 	abstract void PerformAbort();
+
+	/// Implement to handle additional logic for starting execution of the action.
+	void PerformStart() { }
 	
 	/// Called when this action is completed.
 	void OnComplete(CompletionType Status) {
@@ -221,21 +227,21 @@ protected:
 			Subscriber.Callback(Subscriber.State, this, Status);
 		}			
 		CompletionSubscribers = null; // Prevent any references causing memory leaks.		
+		NativeReference.RemoveReference(cast(void*)this); // Remove the reference we created on Start.
 	}
 	
 	/// Notifies this AsyncAction that the operation was completed.
 	void NotifyComplete(CompletionType Status, Untyped CompletionData) {
-		enforce(Status == CompletionType.Successful || Status == CompletionType.Aborted);
-		if(!_HasBegun)
-			throw new InvalidOperationException("Unable to notify an AsyncAction completion prior to invoking Start on it.");
-		// Lock here for adding subscribers.
-		synchronized(StateLock) {
+		synchronized(this) {
+			enforce(Status == CompletionType.Successful || Status == CompletionType.Aborted);
+			if(!_HasBegun)
+				throw new InvalidOperationException("Unable to notify an AsyncAction completion prior to invoking Start on it.");
+			// Lock here for adding subscribers.
 			if(IsComplete)
 				throw new InvalidOperationException("The action was already in a completed state.");
 			this._Status = Status;
 			this._CompletionData = CompletionData;
 		}		
-		NativeReference.RemoveReference(cast(void*)this);
 		OnComplete(Status);		
 	}
 	
@@ -246,7 +252,6 @@ private:
 	SysTime _StartTime;
 	Untyped _CompletionData;
 	bool _HasBegun;
-	Mutex StateLock;
 }
 
 private class ActionManager {
