@@ -136,6 +136,36 @@ private:
 	bool _waitToComplete = false;
 }
 
+/// Simple AsyncRange example to lazily copy between an array in the background.
+/// Under normal circumstances your data would not be in memory like this, but 
+/// rather loaded and stored asynchronously. This makes for a simpler example however.
+unittest {
+	enum size = 1_000_000;
+	int[] elements = iota(0, size).array;
+	int[] copy = new int[size];
+	size_t offset = 0;
+	size_t copyOffset = 0;
+	
+	auto producer = (RangeBuffer!int buffer, ProducerCompletionCallback callback) {
+		size_t count = min(buffer.capacity, size - offset);
+		int[] curr = elements[offset .. offset + count];
+		buffer.buffer[0..count] = curr[];
+		offset += count;
+		callback(offset >= size ? ProducerStatus.complete : ProducerStatus.more, count);
+	};
+	
+	auto consumer = (int[] elements, ConsumerCompletionCallback callback) {
+		copy[copyOffset .. copyOffset + elements.length] = elements[];
+		copyOffset += elements.length;
+		callback();
+	};
+	
+	auto range = new AsyncRange!int(producer, consumer);
+	range.Start();
+	range.WaitForCompletion(10.seconds);
+	assert(elements == copy);
+}
+
 /// Provides a buffer for a producer to write elements to.
 final class RangeBuffer(T) {
 
@@ -158,34 +188,4 @@ final class RangeBuffer(T) {
 
 private:
 	Buffer _buffer;
-}
-
-/// Example of using AsyncRange to lazily copy between an array in the background.
-/// In reality, your data would not be in memory, but would likely be lazily loaded
-/// from an alternate source, buffered to buffer.capacity as required.
-unittest {
-	enum size = 1_000_000;
-	int[] elements = iota(0, size).array;
-	int[] copy = new int[size];
-	size_t offset = 0;
-	size_t copyOffset = 0;
-
-	auto producer = (RangeBuffer!int buffer, ProducerCompletionCallback callback) {
-		size_t count = min(buffer.capacity, size - offset);
-		int[] curr = elements[offset .. offset + count];
-		buffer.buffer[0..count] = curr[];
-		offset += count;
-		callback(offset >= size ? ProducerStatus.complete : ProducerStatus.more, count);
-	};
-
-	auto consumer = (int[] elements, ConsumerCompletionCallback callback) {
-		copy[copyOffset .. copyOffset + elements.length] = elements[];
-		copyOffset += elements.length;
-		callback();
-	};
-
-	auto range = new AsyncRange!int(producer, consumer);
-	range.Start();
-	range.WaitForCompletion(10.seconds);
-	assert(elements == copy);
 }
