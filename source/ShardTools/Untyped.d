@@ -70,7 +70,7 @@ struct Untyped {
 		}
 		static if(is(T == class)) {
 			value = cast(T)cast(Object)Data;
-			if(value is null || typeid(value) != typeid(T))
+			if(value is null) //|| typeid(value) != typeid(T))
 				return false;
 		} else {
 			static if(T.sizeof <= (void*).sizeof) {

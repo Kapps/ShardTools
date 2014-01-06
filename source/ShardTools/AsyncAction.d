@@ -152,14 +152,20 @@ public:
 	/// Optionally, Abort can take in a result to provide additional information about the error or a progress update.
 	/// The result is then available through the CompletionData property.
 	void Abort(Untyped Result = Untyped.init) {
+		// TODO: Combine this with NotifyComplete better.
+		// Code duplication at the moment.
 		synchronized(this) {
+			if(!HasBegun)
+				throw new NotSupportedException("Unable to abort an action prior to starting it.");
 			if(!CanAbort)
 				throw new NotSupportedException("Attempted to abort an AsyncAction that does not support the Abort operation.");
 			if(Status != CompletionType.Incomplete)
 				return;
 			_CompletionData = Result;
 			PerformAbort();
+			this._Status = CompletionType.Aborted;
 		}
+		OnComplete(CompletionType.Aborted);
 	}
 	
 	/// Blocks the calling thread until this action completes.
