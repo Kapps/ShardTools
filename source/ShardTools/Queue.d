@@ -150,10 +150,11 @@ private:
 		assert(queue.Peek() == 4);
 		queue.Enqueue(6);
 		queue.PushFront(2);
+		assert(queue.Peek() == 2);
 		assert(queue.Count == 3);
-		assert(queue.Dequeue() == 4);		
+		assert(queue.Dequeue() == 2);		
 		assert(queue.Count == 2);
+		assert(queue.Dequeue() == 4);
 		assert(queue.Dequeue() == 6);
-		assert(queue.Dequeue() == 2);
 	}
 }

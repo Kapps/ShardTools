@@ -74,7 +74,7 @@ struct Untyped {
 				return false;
 		} else {
 			static if(T.sizeof <= (void*).sizeof) {
-				value = cast(T)Data;
+				value = *(cast(T*)&Data);
 			} else {
 				T* ptr = cast(T*)Data;
 				value = *ptr;
@@ -114,7 +114,7 @@ struct Untyped {
 		} else {
 			// Optimization for small values.
 			static if(T.sizeof <= (void*).sizeof)
-				Data = cast(void*)Value;
+				Data = *(cast(void**)&Value);
 			else {
 				Data = GC.malloc(T.sizeof);
 				//memcpy(Data, &Value, T.sizeof);
