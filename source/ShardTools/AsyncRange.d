@@ -46,7 +46,9 @@ alias void delegate() ConsumerCompletionCallback;
 /// situation, data corruption or deadlocks will occur. This class does not attempt to check for such errors.
 /// Neither the producer nor consumer should perform blocking operations. Any such operations must be
 /// performed in a background thread or handled asynchronously in a different fashion. At least one
-/// element must be produced or consumed in either situation.
+/// element must be produced or consumed in either situation. The first parameter to both callbacks
+/// is a user-defined state that is unused by the range except to pass in to the callbacks. It is allowed
+/// to be different for both callbacks.
 /// 
 /// This action may be aborted. In such a scenario, all that will occur is no more calls will be
 /// made to the producer or consumer. It is expected that if special handling is required that the caller
@@ -59,20 +61,22 @@ alias void delegate() ConsumerCompletionCallback;
 class AsyncRange(T) : AsyncAction {
 
 	/// An alias to the delegate used for consuming data.
-	alias void delegate(T[] data, ConsumerCompletionCallback callback) ConsumerDelegate;
+	alias void delegate(Untyped consumerState, T[] data, ConsumerCompletionCallback callback) ConsumerDelegate;
 	/// An alias to the delegate used for producing data.
-	alias void delegate(RangeBuffer!T buffer, ProducerCompletionCallback callback) ProducerDelegate;
+	alias void delegate(Untyped producerState, RangeBuffer!T buffer, ProducerCompletionCallback callback) ProducerDelegate;
 
-	static if(is(T == struct))
+	static if(!is(T == class) && !is(T == interface))
 		enum EstimatedElementSize = T.sizeof;
 	else
 		enum EstimatedElementSize = 128;
 
 	/// Creates a new AsyncRange with the given delegate used to produce or consume elements.
-	this(ProducerDelegate producer, ConsumerDelegate consumer, size_t bufferSize = max(1, 4096 / EstimatedElementSize)) {
+	this(ProducerDelegate producer, Untyped producerState, ConsumerDelegate consumer, Untyped consumerState, size_t bufferSize = max(1, 4096 / EstimatedElementSize)) {
 		this._bufferSize = bufferSize;
 		this._producer = producer;
 		this._consumer = consumer;
+		this._producerState = producerState;
+		this._consumerState = consumerState;
 	}
 
 protected:
@@ -81,7 +85,7 @@ protected:
 	override void PerformStart() {
 		auto buf = BufferPool.Global.Acquire(_bufferSize * T.sizeof);
 		this._buffer = new RangeBuffer!T(buf);
-		_producer(_buffer, &onProducerComplete);
+		_producer(_producerState, _buffer, &onProducerComplete);
 	}
 
 	/// Stops notifying the producer or consumer of any new data.
@@ -99,7 +103,7 @@ protected:
 				Abort(Untyped(new InvalidOperationException("Received no data, yet the producer indicated more data was available.")));
 			else if(elementsProduced) {
 				T[] elements = _buffer.buffer[0 .. elementsProduced];
-				_consumer(elements, &onConsumerComplete);
+				_consumer(_consumerState, elements, &onConsumerComplete);
 			}
 		} else {
 			enforce(_buffer !is null);
@@ -112,7 +116,7 @@ protected:
 		if(!_isAborted) {
 			if(_waitToComplete)
 				NotifyComplete(CompletionType.Successful, Untyped.init);
-			_producer(_buffer, &onProducerComplete);
+			_producer(_producerState, _buffer, &onProducerComplete);
 		} else {
 			enforce(_buffer !is null);
 			BufferPool.Global.Release(_buffer._buffer);
@@ -132,6 +136,8 @@ private:
 	size_t _bufferSize;
 	ConsumerDelegate _consumer;
 	ProducerDelegate _producer;
+	Untyped _producerState;
+	Untyped _consumerState;
 	bool _isAborted = false;
 	bool _waitToComplete = false;
 }
@@ -146,7 +152,7 @@ unittest {
 	size_t offset = 0;
 	size_t copyOffset = 0;
 	
-	auto producer = (RangeBuffer!int buffer, ProducerCompletionCallback callback) {
+	auto producer = (Untyped _, RangeBuffer!int buffer, ProducerCompletionCallback callback) {
 		size_t count = min(buffer.capacity, size - offset);
 		int[] curr = elements[offset .. offset + count];
 		buffer.buffer[0..count] = curr[];
@@ -154,13 +160,13 @@ unittest {
 		callback(offset >= size ? ProducerStatus.complete : ProducerStatus.more, count);
 	};
 	
-	auto consumer = (int[] elements, ConsumerCompletionCallback callback) {
+	auto consumer = (Untyped _, int[] elements, ConsumerCompletionCallback callback) {
 		copy[copyOffset .. copyOffset + elements.length] = elements[];
 		copyOffset += elements.length;
 		callback();
 	};
 	
-	auto range = new AsyncRange!int(producer, consumer);
+	auto range = new AsyncRange!int(producer, Untyped.init, consumer, Untyped.init);
 	range.Start();
 	range.WaitForCompletion(10.seconds);
 	assert(elements == copy);

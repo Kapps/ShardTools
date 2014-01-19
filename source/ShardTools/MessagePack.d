@@ -1086,7 +1086,7 @@ unittest
 
         enum : long { A = byte.min, B = short.min, C = int.min, D = long.min }
 
-        static STest[][] tests = [
+        static STest[][] tests2 = [
             [{Format.INT8, A}],
             [{Format.INT8, A}, {Format.INT16, B}],
             [{Format.INT8, A}, {Format.INT16, B}, {Format.INT32, C}],
@@ -1094,7 +1094,7 @@ unittest
         ];
 
         foreach (I, T; TypeTuple!(byte, short, int, long)) {
-            foreach (i, test; tests[I]) {
+            foreach (i, test; tests2[I]) {
                 mixin DefinePacker;
 
                 packer.pack(cast(T)test.value);
@@ -1126,7 +1126,7 @@ unittest
             alias TypeTuple!(float, double, double) FloatingTypes;
             static struct FTest { ubyte format; double value; }
 
-            static FTest[] tests = [
+            static FTest[] tests3 = [
                 {Format.FLOAT,  float.min_normal},
                 {Format.DOUBLE, double.max},
                 {Format.DOUBLE, double.max},
@@ -1137,7 +1137,7 @@ unittest
             alias TypeTuple!(float, double, real) FloatingTypes;
             static struct FTest { ubyte format; real value; }
 
-            static FTest[] tests = [
+            static FTest[] tests3 = [
                 {Format.FLOAT,  float.min_normal},
                 {Format.DOUBLE, double.max},
                 {Format.REAL,   real.max},
@@ -1147,22 +1147,22 @@ unittest
         foreach (I, T; FloatingTypes) {
             mixin DefinePacker;
 
-            packer.pack(cast(T)tests[I].value);
-            assert(buffer.data[0] == tests[I].format);
+            packer.pack(cast(T)tests3[I].value);
+            assert(buffer.data[0] == tests3[I].format);
 
             switch (I) {
             case 0:
-                const answer = convertEndianTo!32(_f(cast(T)tests[I].value).i);
+                const answer = convertEndianTo!32(_f(cast(T)tests3[I].value).i);
                 assert(memcmp(&buffer.data[1], &answer, float.sizeof) == 0);
                 break;
             case 1:
-                const answer = convertEndianTo!64(_d(cast(T)tests[I].value).i);
+                const answer = convertEndianTo!64(_d(cast(T)tests3[I].value).i);
                 assert(memcmp(&buffer.data[1], &answer, double.sizeof) == 0);
                 break;
             default:
                 static if (EnableReal)
                 {
-                    const t = _r(cast(T)tests[I].value);
+                    const t = _r(cast(T)tests3[I].value);
                     const f = convertEndianTo!64(t.fraction);
                     const e = convertEndianTo!16(t.exponent);
                     assert(memcmp(&buffer.data[1],            &f, f.sizeof) == 0);
@@ -1170,7 +1170,7 @@ unittest
                 }
                 else
                 {
-                    const answer = convertEndianTo!64(_d(cast(T)tests[I].value).i);
+                    const answer = convertEndianTo!64(_d(cast(T)tests3[I].value).i);
                     assert(memcmp(&buffer.data[1], &answer, double.sizeof) == 0);
                 }
             }
@@ -1234,13 +1234,13 @@ unittest
 
         enum : ulong { A = 16 / 2, B = ushort.max, C = uint.max }
 
-        static Test[][] tests = [
+        static Test[][] tests4 = [
             [{Format.ARRAY | A, Format.ARRAY | A}, {Format.ARRAY16, B}, {Format.ARRAY32, C}],
             [{Format.MAP   | A, Format.MAP   | A}, {Format.MAP16,   B}, {Format.MAP32,   C}],
         ];
 
         foreach (I, Name; TypeTuple!("Array", "Map")) {
-            auto test = tests[I];
+            auto test = tests4[I];
 
             foreach (i, T; TypeTuple!(ubyte, ushort, uint)) {
                 mixin DefinePacker;

@@ -94,11 +94,11 @@ enum DataKind {
 /// Also includes a primitive type for built in types (int, long, etc) as well as pointers and arrays.
 enum TypeKind {
 	///
-	struct_, 
+	struct_,
 	///
-	class_, 
+	class_,
 	///
-	union_, 
+	union_,
 	///
 	enum_,
 	///
@@ -110,7 +110,7 @@ enum TypeKind {
 /// Provides a bitwise enumeration of the modifiers that are applied to one more than one kind of symbol.
 /// This includes storage classes and type qualifiers.
 enum SymbolModifiers {
-	/// 
+	///
 	none_ = 0,
 	///
 	const_ = 1,
@@ -155,7 +155,7 @@ struct Symbol {
 		this._attributes = attributes;
 		this._modifiers = modifiers;
 	}
-	
+
 	/// Returns the name of this symbol.
 	/// In certain cases, such as anonymous structs or unnamed parameters, this may be null.
 	@property string name() @safe const pure nothrow {
@@ -192,13 +192,13 @@ struct Symbol {
 		}
 		return false;
 	}
-	
+
 
 	/// Returns the last specified attribute that matches type T exactly.
 	/// If no attribute is found matching that type, defaultValue is evaluated and returned.
 	/// For convenience, if the attribute contains only a single field, defaultValue may be that field.
 	/// In this case, the value of the field will be returned instead.
-	U findAttribute(T, U)(lazy U defaultValue) 
+	U findAttribute(T, U)(lazy U defaultValue)
 			if(is(T == U) || (__traits(compiles, T.tupleof) && T.tupleof.length == 1 && is(U == typeof(T.tupleof[0])))) {
 
 		foreach(ref attrib; retro(_attributes)) {
@@ -216,7 +216,7 @@ struct Symbol {
 	T findAttribute(T)(lazy T defaultValue = T.init) {
 		return findAttribute!(T, T)(defaultValue());
 	}
-	
+
 	private string _name;
 	private ProtectionLevel _protection;
 	private Variant[] _attributes;
@@ -266,7 +266,7 @@ private:
 /// Stores information about a type (class, union, struct, enum, interface).
 struct TypeMetadata {
 
-	this(Symbol symbol, size_t instanceSize, TypeInfo type, TypeKind kind, SymbolContainer children, 
+	this(Symbol symbol, size_t instanceSize, TypeInfo type, TypeKind kind, SymbolContainer children,
 	     TypeInfo base, TypeInfo parent, TypeInfo[] interfaces, TypeConversionFunction converter) {
 
 		this._symbol = symbol;
@@ -278,7 +278,7 @@ struct TypeMetadata {
 		this._instanceSize = instanceSize;
 		this._parent = parent;
 		this._converter = converter;
-	} 
+	}
 
 	alias symbol this;
 
@@ -439,7 +439,7 @@ private:
 
 /// Provides metadata for a method (including a constructor), providing the return type, parameters, and invocation data.
 struct MethodMetadata {
-	
+
 	this(Symbol symbol, MethodInvokeFunction invoker, ParameterMetadata[] parameters, TypeInfo returnType, size_t vtblSlot) {
 		this._symbol = symbol;
 		this._invoker = invoker;
@@ -570,8 +570,8 @@ private:
 /// Even if a property has more than one setter, it will still be represented by a single instance of ValueMetadata.
 /// The setter used will then be dependent on the type passed in to setValue.
 struct ValueMetadata {
-	
-	this(T)(Symbol symbol, DataKind kind, TypeInfo type, DataGetterFunction getter, DataSetterFunction setter, T backingData) 
+
+	this(T)(Symbol symbol, DataKind kind, TypeInfo type, DataGetterFunction getter, DataSetterFunction setter, T backingData)
 			if(is(T == FieldValueMetadata) || is(T == PropertyValueMetadata)) {
 		this._symbol = symbol;
 		this._type = type;
@@ -624,7 +624,7 @@ struct ValueMetadata {
 	@property bool canGet() const pure nothrow {
 		return _getter !is null;
 	}
-	
+
 	/// Indicates whether this value can be changed dynamically.
 	/// This would return true for fields and properties with setters, and false for read-only properties and user defined attributes.
 	/// For enum values, this is always false.
@@ -646,7 +646,7 @@ struct ValueMetadata {
 	void setValue(InstanceType, ValueType)(InstanceType instance, ValueType value) {
 		// TODO: Need to so support checking for static.
 		//if(is(InstanceType == struct) && !isStatic)
-		//	throw new InvalidOperationException("A struct was passed by value to setValue to a non-static method, causing the operation to have no effect."); 
+		//	throw new InvalidOperationException("A struct was passed by value to setValue to a non-static method, causing the operation to have no effect.");
 		enforceCanSet(instance);
 		_setter(this, wrapVariantPointer(instance), Variant(value));
 	}
@@ -1166,7 +1166,7 @@ private ValueMetadata getField(T, string m)() {
 			// Can't set const or immutable fields:
 			DataSetterFunction setter = null;
 		} else {
-			DataSetterFunction setter = &setFieldValue!(T, index);	
+			DataSetterFunction setter = &setFieldValue!(T, index);
 		}
 		// Unfortunately have to duplicate this, couldn't get getSymbol to work with private fields.
 		// Passing in the symbol causes it to try to be evaluated and has errors with static.
@@ -1347,7 +1347,7 @@ private Variant convertTo(T)(TypeMetadata metadata, Variant instance, Conversion
 private Variant invokeMethod(alias func, T, MethodParentKind parentType)(MethodMetadata metadata, void* instance, Variant[] args) {
 	static if(variadicFunctionStyle!func == Variadic.no) {
 		if(args.length != arity!func) {
-			throw new ReflectionException("Expected " ~ arity!func.text ~ " arguments to " 
+			throw new ReflectionException("Expected " ~ arity!func.text ~ " arguments to "
 				~ metadata.name ~ ", not " ~ args.length.text ~ ".");
 		}
 	}
@@ -1431,7 +1431,7 @@ private void* getVirtualFunctionPointer(MethodParentKind parentType)(void* insta
 		// TODO: We can optimize this easily.
 		// Ultimately, we're only trying to find the Interface instance to get it's offset.
 		// But if the object we're invoking the method on is an interface reference,
-		// we can get the offset through that. At least, I assume we can. 
+		// we can get the offset through that. At least, I assume we can.
 		// Not sure how Foo (Interface) -> Bar : Foo -> DerivedBar : Bar -> DerivedDerived : Foo, DerivedBar would work.
 		// Really though, the cost should be negligible compared to the performance hit of using Variants and such.
 		TypeInfo_Interface typeInterface = cast(TypeInfo_Interface)ti;
@@ -1555,7 +1555,7 @@ private TypeInfo[] templateArgsToTypeInfo(ArgTypes...)() {
 
 // Should always use unqualified typeinfo.
 // Maybe not true. Not sure if could specialize on shared or something at some point...
-private __gshared StoredTypeMetadata[TypeInfo] _typeData; 
+private __gshared StoredTypeMetadata[TypeInfo] _typeData;
 private __gshared StoredModuleMetadata[string] _moduleData;
 
 private struct StoredTypeMetadata {
@@ -1620,8 +1620,8 @@ private template isField(alias T) {
 }
 
 private template isStaticConstructor(alias T) {
-	enum isStaticConstructor = 
-		__traits(identifier, T).startsWith("_sharedStaticCtor") || 
+	enum isStaticConstructor =
+		__traits(identifier, T).startsWith("_sharedStaticCtor") ||
 		__traits(identifier, T).startsWith("_staticCtor");
 }
 
@@ -1782,7 +1782,7 @@ version(unittest) {
 		return val > 3;
 	}
 
-	struct CheckerAttribute(alias fun) { 
+	struct CheckerAttribute(alias fun) {
 		bool check(int args) {
 			return unaryFun!fun(args);
 		}
@@ -1970,7 +1970,7 @@ version(unittest) {
 		assert(myVal.getValue(null) == "mv");
 		assert(myVal.fieldData.index == 0);
 		assert(myValDup.fieldData.index == 2);
-	
+
 	}
 
 	// UDA tests
@@ -2031,7 +2031,7 @@ version(unittest) {
 		Variant interVar = testInter;
 		assert(derivedData.findMethod("foo", typeid(int)) != MethodMetadata.init);
 		assert(derivedData.invokeMethod("foo", interVar, 5) == 50);
-	
+
 		auto largeData = createMetadata!ReflectionLargeStructTester;
 		Variant largeVar = ReflectionLargeStructTester(4);
 		assert(largeData == largeVar.metadata);
@@ -2073,20 +2073,20 @@ version(unittest) {
 			this(int val) {
 				this._val = val;
 			}
-			
+
 			@property int val() const {
 				return _val;
 			}
-			
+
 			@property void val(int value) {
 				_val = value;
 			}
-			
+
 			int getSquare(int input) {
 				return input * input;
 			}
 		}
-		
+
 		// First, we need to generate metadata for Foo.
 		auto metadata = createMetadata!Foo;
 		// Then we can create an instance.

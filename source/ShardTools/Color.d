@@ -154,11 +154,11 @@ struct Color {
 	
 align(1):		
 	/// The Blue component for this color.
-	ubyte B;
+	ubyte R;
 	/// The Green component for this color.
 	ubyte G;					
 	/// The Red component for this color.
-	ubyte R;
+	ubyte B;
 	/// The Alpha component for this color.
 	ubyte A;
 }

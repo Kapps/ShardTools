@@ -38,14 +38,14 @@ module ShardTools.ImageSaver;
 
 import ShardTools.Color;
 //import std.hash.crc32;
-import crc32;
+//import crc32;
 import core.atomic;
 import core.bitop;
 import std.zlib;
 import ShardTools.PathTools;
 import std.file;
 
-// This function is taken from CyberShadow's ae library, from the Image class.
+/+// This function is taken from CyberShadow's ae library, from the Image class.
 // The Image class is licensed MPL, thus this file is as well.		
 /// Saves an array of colours to a file with the specified width and height.
 /// Note that this function has a different license than most of this library.
@@ -142,4 +142,4 @@ static void savePNG(string filename, Color[] pixels, int w, int h) {
 		assert(pos == i+12+chunk.data.length);
 	}
 	std.file.write(filename, data);
-}
+}+/
