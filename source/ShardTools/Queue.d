@@ -112,7 +112,6 @@ private:
 	QueueElement* Head; // The first item enqueued.
 	static if(ThreadSafe) {
 		// TODO: Due to lock contention, we may be better off using a Mutex.
-		// This is where profile-based static if would come in handy.
 		SpinLock Lock;
 	}
 
