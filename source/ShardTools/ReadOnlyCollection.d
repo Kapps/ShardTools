@@ -20,11 +20,11 @@ public:
 		this.Underlying = Collection;
 	}
 
-	static if(__traits(hasMember, CollectionType, "length")) {
+	static if(is(typeof(Underlying.length))) {
 		@property size_t length() const {
 			return Underlying.length;
 		}
-	} else static if(__traits(hasMember, CollectionType, "Count")) {
+	} else static if(is(typeof(Underlying.Count))) {
 		@property size_t length() const {
 			return Underlying.Count;
 		}

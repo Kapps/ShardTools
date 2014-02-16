@@ -28,13 +28,18 @@ class ImmediateAction : AsyncAction {
 	}
 
 	/// Returns an AsyncAction that immediately succeeds with the given completion data.
-	static ImmediateAction success(Untyped completionData) {
+	static ImmediateAction success(Untyped completionData = Untyped.init) {
 		return new ImmediateAction(CompletionType.Successful, completionData);
 	}
 
 	/// Returns an AsyncAction that immediately fails with the given completion data.
-	static ImmediateAction failure(Untyped completionData) {
+	static ImmediateAction failure(Untyped completionData = Untyped.init) {
 		return new ImmediateAction(CompletionType.Aborted, completionData);
+	}
+
+	/// ditto
+	static ImmediateAction failure(Exception ex) {
+		return failure(Untyped(ex));
 	}
 }
 

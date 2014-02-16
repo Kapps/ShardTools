@@ -47,9 +47,9 @@ alias void delegate() ConsumerCompletionCallback;
 /// situation, data corruption or deadlocks will occur. This class does not attempt to check for such errors.
 /// Neither the producer nor consumer should perform blocking operations. Any such operations must be
 /// performed in a background thread or handled asynchronously in a different fashion. At least one
-/// element must be produced or consumed in either situation. The first parameter to both callbacks
-/// is a user-defined state that is unused by the range except to pass in to the callbacks. It is allowed
-/// to be different for both callbacks.
+/// element must be produced or consumed in either situation unless ProducerStatus is complete. 
+/// The first parameter to both callbacks is a user-defined state that is unused by the 
+/// range except to pass in to the callbacks. It is allowed to be different for both callbacks.
 /// 
 /// This action may be aborted. In such a scenario, all that will occur is no more calls will be
 /// made to the producer or consumer. It is expected that if special handling is required that the caller
@@ -57,7 +57,7 @@ alias void delegate() ConsumerCompletionCallback;
 class AsyncRange(T) : AsyncAction {
 
 	/// An alias to the delegate used for consuming data.
-	alias void delegate(Untyped consumerState, T[] data, ConsumerCompletionCallback callback) ConsumerDelegate;
+	alias void delegate(Untyped consumerState, T[] data, ProducerStatus status, ConsumerCompletionCallback callback) ConsumerDelegate;
 	/// An alias to the delegate used for producing data.
 	alias void delegate(Untyped producerState, ProducerCompletionCallback callback) ProducerDelegate;
 
@@ -89,8 +89,8 @@ protected:
 				_waitToComplete = true;
 			if(elements.length == 0 && status == ProducerStatus.more)
 				Abort(Untyped(new InvalidOperationException("Received no data, yet the producer indicated more data was available.")));
-			else if(elements.length > 0) {
-				_consumer(_consumerState, elements, &onConsumerComplete);
+			else {
+				_consumer(_consumerState, elements, status, &onConsumerComplete);
 			}
 		}
 	}
@@ -100,7 +100,8 @@ protected:
 		if(!_isAborted) {
 			if(_waitToComplete)
 				NotifyComplete(CompletionType.Successful, Untyped.init);
-			_producer(_producerState, &onProducerComplete);
+			else
+				_producer(_producerState, &onProducerComplete);
 		}
 	}
 
@@ -130,7 +131,7 @@ unittest {
 		callback(offset >= size ? ProducerStatus.complete : ProducerStatus.more, curr);
 	};
 	
-	auto consumer = (Untyped _, int[] elements, ConsumerCompletionCallback callback) {
+	auto consumer = (Untyped _, int[] elements, ProducerStatus status, ConsumerCompletionCallback callback) {
 		copy[copyOffset .. copyOffset + elements.length] = elements[];
 		copyOffset += elements.length;
 		callback();

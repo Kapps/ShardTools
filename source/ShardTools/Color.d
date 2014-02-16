@@ -4,12 +4,16 @@
 /// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.Color;
 
+version(Have_shardmath)
+	version=ShardMath;
+
 version(ShardMath) {
 	private import ShardMath.Vector;
 }
 
 /// Represents a Color in RGBA format, with one byte per channel.
 /// This struct is simple with no overhead, but lacks more complex operations.
+/// The first byte is R, followed by G, B, then A.
 struct Color {
 	
 	/**

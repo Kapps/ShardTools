@@ -197,7 +197,7 @@ public:
 	/// Params:
 	/// 	T = The type of the values in the array.
 	/// 	Value = The array to write.
-	void Write(T)(in T[] Value) if(!is(T == class) && !is(T == struct) && !isArray!T) {
+	void Write(T)(in T[] Value) if(!is(T == class) && !is(T == interface) && !isArray!T) {
 		CheckDisposed();
 		if(Value.length == 0)
 			return;
