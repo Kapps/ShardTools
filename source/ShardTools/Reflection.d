@@ -67,32 +67,36 @@ import std.math;
 /// Indicates the protection level of a symbol, such as private or public.
 enum ProtectionLevel {
 	/// No protection level exists for this particular symbol.
+	/// This is usually for symbols such as parameters that do not have protection levels.
 	none_ = 0,
-	/// The symbol is private, accessible only to the current module.
+	/// 
 	private_,
-	/// The symbol is protected, accessible to types derived from the given type.
+	/// 
 	protected_,
-	/// The symbol is accessible by any module within the same package.
+	/// 
 	package_,
-	/// The symbol is public, accessible by any module from the same library.
+	/// 
 	public_,
-	/// The symbol is exported across library boundaries.
+	/// 
 	export_
 }
 
 /// Indicates whther a value refers to a field or a property.
 enum DataKind {
-	/// The data is a raw field.
+	/// The value is a raw field.
 	field,
-	/// The data has a property backing it.
+	/// The value is a property, possibly referring to a field.
 	property,
-	/// The data is an enum constant.
+	/// The value is an enum constant.
 	constant
 }
 
 /// Indicates whether an instance of TypeMetadata provides information for a struct, class, union, interface, or enum.
 /// Also includes a primitive type for built in types (int, long, etc) as well as pointers and arrays.
 enum TypeKind {
+	/// A primitive type, such as an int or long.
+	/// Arrays and pointers are also considered primitives for the purposes of this enum.
+	primitive_,
 	///
 	struct_,
 	///
@@ -102,35 +106,47 @@ enum TypeKind {
 	///
 	enum_,
 	///
-	interface_,
-	///
-	primitive_
+	interface_
 }
 
-/// Provides a bitwise enumeration of the modifiers that are applied to one more than one kind of symbol.
-/// This includes storage classes and type qualifiers.
-enum SymbolModifiers {
+/// Indicates the modifiers that are applied to a given symbol, such as scope or static.
+/// This is a flags based enum, so multiple values may be set at once.
+enum SymbolModifier {
+	/// 
+	none_ = 0,
 	///
+	//extern_ = 1,
+	///
+	///
+	//scope_ = 8,
+	///
+	//static_ = 32,
+	///
+	//synchronized_ = 64,
+	///
+	///
+	// Is this feasible? Would be useful to know if something is thread-local, but not sure how you'd check for it...
+	// Excluding trying to write to it from a different thread of course.
+	//gshared_ = 128
+	// No support for deprecated yet.
+	/+///
+	deprecated_ = 512,+/
+}
+
+/// Indicates the type constructor or qualifier of a type, such as const, shared, immutable, or inout.
+/// This is a flags based enum, so multiple values may be set at once.
+enum TypeQualifier {
+	/// A mutable and not shared type.
+	/// The actual declaration may still be marked __gshared and not thread-local however.
 	none_ = 0,
 	///
 	const_ = 1,
 	///
-	extern_ = 2,
+	immutable_ = 2,
 	///
-	immutable_ = 4,
+	inout_ = 4,
 	///
-	scope_ = 8,
-	///
-	shared_ = 16,
-	///
-	static_ = 32,
-	///
-	synchronized_ = 64,
-	///
-	gshared_ = 128
-	// No support for deprecated yet.
-	/+///
-	deprecated_ = 512,+/
+	shared_ = 8
 }
 
 alias Variant function(ValueMetadata metadata, Variant instance) DataGetterFunction;
@@ -149,7 +165,7 @@ mixin(MakeException("ReflectionException"));
 /// This includes features such as name, protection, and user-defined attributes.
 struct Symbol {
 
-	this(string name, ProtectionLevel protection, Variant[] attributes, SymbolModifiers modifiers) {
+	this(string name, ProtectionLevel protection, Variant[] attributes, SymbolModifier modifiers) {
 		this._name = name;
 		this._protection = protection;
 		this._attributes = attributes;
@@ -171,11 +187,11 @@ struct Symbol {
 
 	// TODO: Implement.
 	/// Returns the modifiers that apply to this symbol.
-	@disable @property SymbolModifiers modifiers() @safe const pure nothrow {
+	@disable @property SymbolModifier modifiers() @safe const pure nothrow {
 		return _modifiers;
 	}
 
-	//mixin(getIsFlagsMixin!(SymbolModifiers, "modifiers"));
+	//mixin(getIsFlagsMixin!(SymbolModifier, "modifiers"));
 
 	/// Returns a duplicate of the array containing any attributes that apply to this symbol.
 	@property Variant[] attributes() pure {
@@ -220,7 +236,7 @@ struct Symbol {
 	private string _name;
 	private ProtectionLevel _protection;
 	private Variant[] _attributes;
-	SymbolModifiers _modifiers;
+	SymbolModifier _modifiers;
 }
 
 /// Provides information about a module and the symbols it contains.
@@ -266,7 +282,7 @@ private:
 /// Stores information about a type (class, union, struct, enum, interface).
 struct TypeMetadata {
 
-	this(Symbol symbol, size_t instanceSize, TypeInfo type, TypeKind kind, SymbolContainer children,
+	this(Symbol symbol, size_t instanceSize, TypeInfo type, TypeKind kind, TypeQualifier qualifiers, SymbolContainer children,
 	     TypeInfo base, TypeInfo parent, TypeInfo[] interfaces, TypeConversionFunction converter) {
 
 		this._symbol = symbol;
@@ -278,6 +294,7 @@ struct TypeMetadata {
 		this._instanceSize = instanceSize;
 		this._parent = parent;
 		this._converter = converter;
+		this._qualifiers = qualifiers;
 	}
 
 	alias symbol this;
@@ -299,6 +316,10 @@ struct TypeMetadata {
 	/// Gets the symbol representing the type this metadata refers to.
 	@property Symbol symbol() @safe pure nothrow {
 		return _symbol;
+	}
+
+	@property TypeQualifier qualifiers() @safe const pure nothrow {
+		return _qualifiers;
 	}
 
 	/// Gets the size of a single instance of this type.
@@ -356,6 +377,7 @@ private:
 	TypeKind _kind;
 	Symbol _symbol;
 	TypeConversionFunction _converter;
+	TypeQualifier _qualifiers;
 }
 
 /// Provides a means of storing symbols within a type or module.
@@ -665,6 +687,7 @@ struct ValueMetadata {
 			// While yes, we could make it work in this some cases (adjusting values on a Variant),
 			// this would lead to things like getValue(instance).setValue("bar", 3) and expecting instance.bar to be changed.
 			// In reality, a copy of instance.bar would be changed instead.
+			// TODO: This is probably feasible by just using peek.
 			if(cast(TypeInfo_Struct)instance.type)
 				throw new NotSupportedException("Unable to set a value on a struct contained by a Variant as it would operate on a copy.");
 		}
@@ -776,11 +799,15 @@ TypeMetadata metadata(T)(T instance) {
 	} else static if(is(Unqual!T : TypeInfo)) {
 		typeInfo = cast()instance;
 	} else {
-		static if(is(T == interface))
-			typeInfo = (cast(Object)instance).classinfo;
-		else
-			typeInfo = typeid(instance);
-		version(logreflect) writeln("Got type info for ", typeInfo, " from ", instance);
+		if(instance is null)
+			typeInfo = typeid(T);
+		else {
+			static if(is(T == interface))
+				typeInfo = (cast(Object)instance).classinfo;
+			else
+				typeInfo = typeid(instance);
+		}
+		version(logreflect) writeln("Got type info for ", typeInfo, " from ", cast()instance);
 	}
 	// TODO: If the type is Dynamic, return that instead.
 	// TODO: Figure out a way to lock this; can't just use typeInfo because synchronized(typeid(int)) segfaults.
@@ -789,7 +816,7 @@ TypeMetadata metadata(T)(T instance) {
 		if(existing != TypeMetadata.init)
 			return existing;
 		static if(!isVariant!T && !is(T : TypeInfo)) {
-			version(logreflect) writeln("No metadata for " ~ typeInfo.text ~ "; creating and returning metadata for " ~ typeid(Unqual!T).text ~ ".");
+			version(logreflect) writeln("No metadata for " ~ typeInfo.text ~ "; creating and returning metadata for " ~ typeid(T).text ~ ".");
 			return createMetadata!T();
 		} else {
 			static if(isVariant!T) {
@@ -802,7 +829,7 @@ TypeMetadata metadata(T)(T instance) {
 	}
 }
 
-/// Generates reflection data for the given class, struct, union, or enum.
+/// Generates reflection data for the given class, struct, interface, primitive, union, or enum.
 /// Types that are referred to directly by the given type will be lazily loaded upon being accessed.
 TypeMetadata createMetadata(Type)() {
 	// TODO: Decide how to handle this synchronization.
@@ -817,22 +844,22 @@ TypeMetadata createMetadata(Type)() {
 	// For now, I doubt the concurrency is going to be too important so just lock a single thing (RWMutex it).
 	//synchronized(typeid(T)) {
 	// Below pragma could be useful in situations where you want to know exactly what's being compiled in.
-	alias T = Unqual!Type;
+	alias T = Type;
 	version(debugreflect) pragma(msg, "Compiling metadata for " ~ T.stringof);
 	synchronized(typeid(TypeMetadata)) {
 		TypeMetadata existing = getStoredExisting(typeid(T), true);
 		if(existing != TypeMetadata.init)
 			return existing;
-		static if(__traits(compiles, getType!T)) {
+		//static if(__traits(compiles, getType!T)) {
 			auto result = getType!T;
 			//synchronized(typeid(TypeMetadata)) {
-			_typeData[typeid(Unqual!T)] = StoredTypeMetadata(result);
+			_typeData[typeid(T)] = StoredTypeMetadata(result);
 			//}
 			return result;
-		} else {
+		/+} else {
 			pragma(msg, "Warning: Internal Error - Failed to create metadata for " ~ T.stringof ~ " as getType!T failed to compile.");
 			return TypeMetadata.init;
-		}
+		}+/
 	}
 }
 
@@ -852,30 +879,37 @@ private TypeMetadata getType(T)() {
 			TypeInfo parent = null;
 	}
 	TypeKind kind = getTypeKind!T;
-	TypeInfo type = typeid(Unqual!T);
+	TypeInfo type = typeid(T);
 	TypeInfo base = getBase!T;
 	size_t instanceSize = getSize!T;
 	TypeInfo[] interfaces = getInterfaces!T;
+	// TODO: Need to make this not be Unqual.
+	// The problem is that we have a Variant passed in.
+	// So when we get inout, we don't know what the type we want is.
 	TypeConversionFunction converter = &convertTo!(Unqual!T);
-	TypeMetadata result = TypeMetadata(symbol, instanceSize, type, kind, symbols, base, parent, interfaces, converter);
+	TypeQualifier qualifiers;
+	static if(is(T == immutable))
+		qualifiers = TypeQualifier.immutable_;
+	else static if(is(T == inout))
+		qualifiers = TypeQualifier.inout_;
+	else static if(is(T == const))
+		qualifiers = TypeQualifier.const_;
+	static if(is(T == shared))
+		qualifiers |= TypeQualifier.shared_;
+	TypeMetadata result = TypeMetadata(symbol, instanceSize, type, kind, qualifiers, symbols, base, parent, interfaces, converter);
 	return result;
 }
 /// Register a loader that can get type metadata for this instance upon demand.
 /// Returns the TypeInfo for the type that was registered.
 TypeInfo registerLazyLoader(T)() {
-	// TODO: Figure out a way to lock this; can't just use typeInfo because synchronized(typeid(int)) segfaults.
-	// On second thought, forget it, I highly doubt anything is going to care that much about concurrency here.
-	// It's an optimization for later if need be.
-	// A RWMutex is important though.
-	//synchronized(typeid(T)) {
+	// TODO: Better locking, such as RWMutex and not locking typeid(TypeMetadata).
 	synchronized(typeid(TypeMetadata)) {
-		if(typeid(Unqual!T) !in _typeData) {
+		if(typeid(T) !in _typeData) {
 			version(logreflect) writeln("Generating lazy loader for ", T.stringof, ".");
-			_typeData[typeid(Unqual!T)] = StoredTypeMetadata(&createMetadata!T);
+			_typeData[typeid(T)] = StoredTypeMetadata(&createMetadata!T);
 		}
 	}
-	//}
-	return typeid(Unqual!T);
+	return typeid(T);
 }
 
 /// Finds the type with the given name on the specified metadata.
@@ -929,6 +963,10 @@ private MethodMetadata findMethodInternal(MethodMetadata[] methods, string metho
 			// Also fix qualified parameters (const, etc).
 			// Or Variant.convertsTo for checking if implicit conversion.
 			// Point being, lots of things can do it, so do it.
+			// Remember to try an exact match first.
+			// For the rest, should try to define order...
+			// Also consider that non-const/immutable can implicitly cast to const/immutable.
+			// Not sure how to get TypeInfo for that though... could store in Metadata but that's getting very heavy.
 			foreach(i, param; data.parameters) {
 				if(param.type != paramTypes[i]) {
 					falseParam = true;
@@ -1033,7 +1071,7 @@ private Symbol getSymbol(Args...)() if(Args.length == 1) {
 	string name = getName!T;
 	ProtectionLevel protection = getProtection!T;
 	Variant[] attributes = getAttributes!T;
-	SymbolModifiers modifiers = SymbolModifiers.none_;
+	SymbolModifier modifiers = SymbolModifier.none_;
 	Symbol result = Symbol(name, protection, attributes, modifiers);
 	return result;
 }
@@ -1143,7 +1181,7 @@ private bool hasField(T, string m)() {
 private ValueMetadata getEnumValue(T, string m)() {
 	enum dataKind = DataKind.constant;
 	// Enums can't have attributes or protection.
-	Symbol symbol = Symbol(m, ProtectionLevel.none_, null, SymbolModifiers.immutable_);
+	Symbol symbol = Symbol(m, ProtectionLevel.none_, null, SymbolModifier.none_);
 	TypeInfo type = typeid(T);
 	DataGetterFunction getter = &getEnumConstant!(T, m);
 	DataSetterFunction setter = null;
@@ -1170,11 +1208,12 @@ private ValueMetadata getField(T, string m)() {
 		}
 		// Unfortunately have to duplicate this, couldn't get getSymbol to work with private fields.
 		// Passing in the symbol causes it to try to be evaluated and has errors with static.
+		alias FieldType = typeof(T.tupleof[index]);
 		string name = m;
 		ProtectionLevel protection = to!ProtectionLevel(__traits(getProtection, __traits(getMember, T, m)) ~ "_");
 		auto unparsedAttribs = __traits(getAttributes, T.tupleof[index]);
 		Variant[] attributes = attributeTupleToArray(unparsedAttribs);
-		SymbolModifiers modifiers = SymbolModifiers.none_;
+		SymbolModifier modifiers = SymbolModifier.none_;
 		Symbol symbol = Symbol(name, protection, attributes, modifiers);
 		TypeInfo declaringType = typeid(T);
 		FieldValueMetadata fieldData = FieldValueMetadata(index, offset, declaringType);
@@ -1189,7 +1228,7 @@ private ValueMetadata getProperty(T)(MethodMetadata getterMethod, MethodMetadata
 	ProtectionLevel protection = getterMethod.symbol._protection;
 	// We default to the getter's name and protection, but no attributes.
 	// Attributes should be gotten for each individual method.
-	Symbol symbol = Symbol(name, protection, null, SymbolModifiers.none_);
+	Symbol symbol = Symbol(name, protection, null, SymbolModifier.none_);
 	PropertyValueMetadata propertyData = PropertyValueMetadata(getterMethod, setterMethods);
 	DataGetterFunction getter = &getPropertyValue!(T);
 	DataSetterFunction setter = &setPropertyValue!(T);
@@ -1553,8 +1592,6 @@ private TypeInfo[] templateArgsToTypeInfo(ArgTypes...)() {
 	return paramTypes;
 }
 
-// Should always use unqualified typeinfo.
-// Maybe not true. Not sure if could specialize on shared or something at some point...
 private __gshared StoredTypeMetadata[TypeInfo] _typeData;
 private __gshared StoredModuleMetadata[string] _moduleData;
 
@@ -2063,6 +2100,24 @@ version(unittest) {
 		assert(metaRtbe.coerceFrom("myVal2") == ReflectionTestBaseEnum.myVal2);
 
 		// TODO: This needs more tests. Particularly object -> interface -> base.
+	}
+
+	// Test type qualifiers.
+	unittest {
+		static class Foo { }
+		inout(Foo) foo(inout Foo f) { 
+			assert(f.metadata.qualifiers & TypeQualifier.inout_);
+			return f; 
+		}
+		const Foo a;
+		Foo b;
+		shared Foo c;
+		const shared Foo d;
+		assert(a.metadata.qualifiers & TypeQualifier.const_);
+		assert(a.metadata.qualifiers == foo(a).metadata.qualifiers);
+		assert(b.metadata.qualifiers == TypeQualifier.none_);
+		assert(c.metadata.qualifiers & TypeQualifier.shared_);
+		assert(d.metadata.qualifiers & (TypeQualifier.shared_ | TypeQualifier.const_));
 	}
 
 	// Test module header example.

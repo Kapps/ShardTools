@@ -149,6 +149,27 @@ public:
 		return null;
 	}
 
+	// Untested.
+	/+/// Returns the first or last node where the specified predicate resolves to true
+	/// for the value of the current node and haystack.
+	/// Returns null if no node matches.
+	LinkedListNode FindFirst(alias pred = "a == b")(T haystack) {
+		foreach(value, node; this) {
+			if(binaryFun!pred(value, haystack))
+				return node;
+		}
+		return null;
+	}
+
+	/// ditto
+	LinkedListNode FindLast(alias pred = "a == b")(T haystack) {
+		for(LinkedListNode node = _Tail; node !is null; node = node.Previous) {
+			if(binaryFun!pred(node.value, haystack))
+				return node;
+		}
+		return null;
+	}+/
+
 	// TODO: Make this a struct!
 	static class LinkedListNode {
 		/// Gets the node prior to this node.
