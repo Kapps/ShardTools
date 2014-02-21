@@ -112,25 +112,13 @@ enum TypeKind {
 /// Indicates the modifiers that are applied to a given symbol, such as scope or static.
 /// This is a flags based enum, so multiple values may be set at once.
 enum SymbolModifier {
-	/// 
+	/// No currently handled modifiers are set.
+	/// Note that not all modifiers are retrieved at the moment.
 	none_ = 0,
-	///
-	//extern_ = 1,
-	///
-	///
-	//scope_ = 8,
-	///
-	//static_ = 32,
-	///
-	//synchronized_ = 64,
-	///
-	///
-	// Is this feasible? Would be useful to know if something is thread-local, but not sure how you'd check for it...
-	// Excluding trying to write to it from a different thread of course.
-	//gshared_ = 128
-	// No support for deprecated yet.
-	/+///
-	deprecated_ = 512,+/
+	/// Indicates if the field or method is static.
+	/// BUGS:
+	/// 	This currently only works on methods (including properties), not fields.
+	static_ = 1,
 }
 
 /// Indicates the type constructor or qualifier of a type, such as const, shared, immutable, or inout.
@@ -185,13 +173,12 @@ struct Symbol {
 		return _protection;
 	}
 
-	// TODO: Implement.
 	/// Returns the modifiers that apply to this symbol.
-	@disable @property SymbolModifier modifiers() @safe const pure nothrow {
+	@property SymbolModifier modifiers() @safe const pure nothrow {
 		return _modifiers;
 	}
 
-	//mixin(getIsFlagsMixin!(SymbolModifier, "modifiers"));
+	mixin(getIsFlagsMixin!(SymbolModifier, "modifiers"));
 
 	/// Returns a duplicate of the array containing any attributes that apply to this symbol.
 	@property Variant[] attributes() pure {
@@ -1072,6 +1059,8 @@ private Symbol getSymbol(Args...)() if(Args.length == 1) {
 	ProtectionLevel protection = getProtection!T;
 	Variant[] attributes = getAttributes!T;
 	SymbolModifier modifiers = SymbolModifier.none_;
+	static if(__traits(isStaticFunction, T))
+		modifiers |= SymbolModifier.static_;
 	Symbol result = Symbol(name, protection, attributes, modifiers);
 	return result;
 }
@@ -1226,9 +1215,10 @@ private ValueMetadata getProperty(T)(MethodMetadata getterMethod, MethodMetadata
 	TypeInfo type = getterMethod._returnType;
 	string name = getterMethod.symbol._name;
 	ProtectionLevel protection = getterMethod.symbol._protection;
-	// We default to the getter's name and protection, but no attributes.
+	SymbolModifier modifiers = getterMethod.symbol.modifiers;
+	// We default to the getter's name, protection, and modifiers, but no attributes.
 	// Attributes should be gotten for each individual method.
-	Symbol symbol = Symbol(name, protection, null, SymbolModifier.none_);
+	Symbol symbol = Symbol(name, protection, null, modifiers);
 	PropertyValueMetadata propertyData = PropertyValueMetadata(getterMethod, setterMethods);
 	DataGetterFunction getter = &getPropertyValue!(T);
 	DataSetterFunction setter = &setPropertyValue!(T);
@@ -1546,6 +1536,9 @@ private Variant getEnumConstant(T, string m)(ValueMetadata unused, Variant insta
 // to be able to get it as an instance FooBar without risking a full coercion and string
 // conversions / parsing / such.
 private T as(T)(Variant inst) {
+	// Variant does not allow getting or coercing when it stores null.
+	if(inst.type == typeid(null))
+		return T.init;
 	static if(is(typeof(inst.coerce!T))) {
 		if(cast(ClassInfo)inst.type) {
 			// We only do this for classes.
@@ -1697,6 +1690,8 @@ private string getIsFlagsMixin(T, string flagsName)() if(is(T == enum)) {
 		string transformedName = capitalize(m);
 		if(transformedName[$-1] == '_')
 			transformedName = transformedName[0..$-1];
+		result ~= "/// Indicates if this symbol has the $(D" ~ m[0..$-1] ~ ") modifier.\r\n";
+		result ~= "/// This method is simply a shortcut to check if the bit is set in $(D modifiers).\r\n";
 		result ~= "@property bool is" ~ transformedName ~ "() @safe const pure nothrow {";
 		result ~= "\r\n\treturn (" ~ flagsName ~ " & " ~ T.stringof ~ "." ~ m ~ ") != 0;\r\n}";
 	}
@@ -2118,6 +2113,23 @@ version(unittest) {
 		assert(b.metadata.qualifiers == TypeQualifier.none_);
 		assert(c.metadata.qualifiers & TypeQualifier.shared_);
 		assert(d.metadata.qualifiers & (TypeQualifier.shared_ | TypeQualifier.const_));
+	}
+
+	// Test symbol modifiers.
+	unittest {
+		class Foo {
+			void foo() { }
+			static void foo(int a) { }
+			@property static int bar() { return 1; }
+		}
+		// At the moment, only static is implemented.
+		// And that only for methods...
+		auto metadata = createMetadata!Foo;
+		assert(metadata.findMethod("foo").modifiers == SymbolModifier.none_);
+		assert(metadata.findMethod("foo", typeid(int)).modifiers == SymbolModifier.static_);
+		assert(metadata.findValue("bar").modifiers == SymbolModifier.static_);
+		assert(metadata.findValue("bar").isStatic);
+		assert(metadata.getValue("bar", null) == 1);
 	}
 
 	// Test module header example.
