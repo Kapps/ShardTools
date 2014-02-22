@@ -354,6 +354,11 @@ struct TypeMetadata {
 		return symbol.protection.text[0..$-1] ~ " " ~ kind.text[0..$-1] ~ " " ~ symbol.name;
 	}
 
+	bool opEquals(in TypeMetadata other) const {
+		return _type == other._type && _base == other._base && _interfaces == other._interfaces && _parent == other._parent && _instanceSize == other._instanceSize 
+			&& _children == other._children && _kind == other._kind && _symbol == other._symbol && _converter == other._converter && _qualifiers == other._qualifiers;
+	}
+
 private:
 	TypeInfo _base;
 	TypeInfo[] _interfaces;
@@ -371,6 +376,7 @@ private:
 struct SymbolContainer {
 
 	// TODO: Don't duplicate; get a real non-transitive read-only return type instead.
+	// Or better yet, just make it all immutable like it should be in the first place.
 
 	/// Returns all of the types that this symbol contains.
 	@property const(TypeInfo[]) types() const {
@@ -509,6 +515,7 @@ struct MethodMetadata {
 		static if(T.length == 1 && is(T[0] == Variant[])) {
 			Variant[] args = arguments[0];
 		} else {
+			// TODO: Can we stack allocate this?
 			Variant[] args = new Variant[arguments.length];
 			foreach(i, arg; arguments)
 				args[i] = arg;
@@ -564,6 +571,10 @@ struct MethodMetadata {
 			result = result[0..$-2];
 		result ~= ")";
 		return result;
+	}
+
+	bool opEquals(in MethodMetadata other) const {
+		return _invoker == other._invoker && _parameters == other._parameters && _returnType == other._returnType && _symbol == other._symbol && _vtblSlot == other._vtblSlot && _functionPtr == other._functionPtr;
 	}
 
 private:
@@ -684,6 +695,11 @@ struct ValueMetadata {
 		string result = (kind == DataKind.constant ? "enum" : symbol.protection.text[0..$-1])
 			~ " " ~ type.text ~ " " ~ symbol.name ~ (kind == DataKind.property ? "()" : "");
 		return result;
+	}
+
+	bool opEquals(in ValueMetadata other) const {
+		return _type == other._type && _getter == other._getter && _setter == other._setter && _kind == other._kind && _symbol == other._symbol
+			&& (_kind == DataKind.property ? _propertyData == other._propertyData : _fieldData == other._fieldData);
 	}
 
 private:
@@ -929,43 +945,53 @@ ValueMetadata findValue(T)(T instance, string name) {
 /// Returns the first method with the specified name on the given instance metadata.
 /// The instance must be an instance of either ModuleMetadata or TypeMetadata.
 /// Only methods that can be invoked with the paramTypes are returned (with an empty array for no arguments).
-/// At the moment this is flawed and only returns parameters that exactly match the given type.
-/// Variadic arguments are not yet supported either.
 /// If no method with that name and set of arguments exists, init is returned.
+/// Bugs:
+/// 	At the moment only exact matches and matches with conversion to const are supported.
+/// 	Implicit conversions and variadic arguments are not supported.
 MethodMetadata findMethod(T)(T metadata, string methodName, TypeInfo[] paramTypes...) if(is(T == TypeMetadata) || is(T == ModuleMetadata)) {
 	return findMethodInternal(metadata.children._methods, methodName, paramTypes);
 }
 
 private MethodMetadata findMethodInternal(MethodMetadata[] methods, string methodName, TypeInfo[] paramTypes...) {
-	// TODO: Consider optimizing this.
+	// TODO: Optimizing would be nice, but not hugely important since the caller can store the result.
+	// TODO: Variable length args.
+	// In accordance with http://dlang.org/function.html#function-overloading, overloads are handled in the following ways (though opposite index). 
+	// Index -1 is an exact match and not included because it would be returned immediately.
+	// Index 0 is a match with implicit conversions.
+	// Index 1 is a match with conversion to const.
+	// If vararg then we need only check the specified parameters. If there are more, we can return it anyways.
+	// Except that's not supported because it starts getting quite complicated to invoke...
+	MethodMetadata bestMatch;
+	ImplicitConversionType bestMatchType = ImplicitConversionType.none_;
 	foreach(ref data; methods) {
+		// TODO: Supporting implicit conversions will be harder; will likely need metadata support.
+		//bool hasImplicitConversion = false;
+		ImplicitConversionType worstConversion = ImplicitConversionType.exact_;
 		if(data.name == methodName) {
 			if(data.parameters.length != paramTypes.length)
 				continue;
 			bool falseParam = false;
-			// TODO: Use _d_istypeof2 and/or _d_dynamic_cast to do this.
-			// That way it can handle things like this for us.
-			// Or else Variant.implicitConversionTargets.
-			// Just use something to not have to force exact types.
-			// Also fix qualified parameters (const, etc).
-			// Or Variant.convertsTo for checking if implicit conversion.
-			// Point being, lots of things can do it, so do it.
-			// Remember to try an exact match first.
-			// For the rest, should try to define order...
-			// Also consider that non-const/immutable can implicitly cast to const/immutable.
-			// Not sure how to get TypeInfo for that though... could store in Metadata but that's getting very heavy.
 			foreach(i, param; data.parameters) {
-				if(param.type != paramTypes[i]) {
-					falseParam = true;
+				auto conversionType = getImplicitConversionType(paramTypes[i], param.type);
+				worstConversion = max(worstConversion, conversionType);
+				if(worstConversion == ImplicitConversionType.none_)
 					break;
-				}
 			}
-			if(!falseParam)
+			if(worstConversion == ImplicitConversionType.exact_)
 				return data;
+			// Don't overwrite an implicit mismatch with an implicit + const mismatch.
+			if(worstConversion < bestMatchType) {
+				bestMatchType = worstConversion;
+				bestMatch = data;
+			}
 		}
 	}
-	version(logreflect) writeln("Did not find method with overloads of ", paramTypes, ".");
-	return MethodMetadata.init;
+	version(logreflect) {
+		if(bestMatchType == ImplicitConversionType.none_)
+			 writeln("Did not find method with overloads of ", paramTypes, ".");
+	}
+	return bestMatch;
 }
 
 /// Finds the first method with the given type params, as subject to $(D, findMethod).
@@ -1013,8 +1039,8 @@ Variant createInstance(ArgTypes...)(TypeMetadata metadata, ArgTypes args) {
 		// TODO: Is it safe to allocate this on the stack?
 		// Almost certain it is for the default constructor.
 		// But not sure about for when passing in arguments.
-		if(metadata.type.init.ptr !is null)
-			bytes = cast(void[])metadata.type.init.dup;
+		if(metadata.type.init().ptr !is null)
+			bytes = cast(void[])metadata.type.init().dup;
 		else
 			bytes = new void[metadata.instanceSize];
 		if(ArgTypes.length > 0) {
@@ -1051,6 +1077,35 @@ Variant createInstance(ArgTypes...)(TypeMetadata metadata, ArgTypes args) {
 			return retResult;
 		}
 	}
+}
+
+private enum ConversionKind {
+	cast_,
+	coerce_
+}
+
+private enum MethodParentKind {
+	unknown_,
+	interface_,
+	class_
+}
+
+/// Indicates how the source type can be implicitly converted to the target type.
+/// Guaranteed to be ordered from best to worst sequentially.
+private enum ImplicitConversionType {
+	/// An exact match, no conversion was required.
+	exact_ = 0,
+	/// A conversion to inout is required.
+	/// In this situation, implicit_ may be set as well.
+	inout_ = 1,
+	/// A conversion to an implicit type is required.
+	/// In this situation const_ may be set as well.
+	implicit_ = 2,
+	/// A conversion from non-const to const is required.
+	/// In this situation implicit_ may be set as well.
+	const_ = 4,
+	// No implicit conversion is possible
+	none_ = 8,
 }
 
 private Symbol getSymbol(Args...)() if(Args.length == 1) {
@@ -1335,11 +1390,6 @@ private size_t getSize(T)() {
 		return T.sizeof;
 }
 
-private enum ConversionKind {
-	cast_,
-	coerce_
-}
-
 private Variant convertTo(T)(TypeMetadata metadata, Variant instance, ConversionKind kind) {
 	static if(is(Unqual!T == void)) {
 		throw new ReflectionException("Unable to cast to void.");
@@ -1380,7 +1430,7 @@ private Variant invokeMethod(alias func, T, MethodParentKind parentType)(MethodM
 				~ metadata.name ~ ", not " ~ args.length.text ~ ".");
 		}
 	}
-	alias ArgTypes = staticMap!(Unqual, ParameterTypeTuple!func);
+	alias ArgTypes = staticMap!(ReplaceInout, ParameterTypeTuple!func);
 	alias RetType = Unqual!(ReturnType!func);
 	static struct Invoker {
 		// Most sketchy hack.
@@ -1390,16 +1440,12 @@ private Variant invokeMethod(alias func, T, MethodParentKind parentType)(MethodM
 		this(Variant[] args) {
 			enforce(args.length == ArgTypes.length);
 			foreach(i, type; ArgTypes) {
-				auto val = args[i].as!type;
+				auto val = args[i].as!type(true);
 				params[i] = val;
 			}
 		}
 		ArgTypes params;
 	}
-	/+staticMap!(Unqual, ParameterTypeTuple!func) unqualParams;
-	foreach(i, type; UnqualTypes) {
-		unqualParams[i] = cast(type)args[i].get!(ParameterTypeTuple!(func)[i]);
-	}+/
 	ArgTypes params = Invoker(args).params;
 	//ParameterTypeTuple!func params = cast(ParameterTypeTuple!func)unqualParams;
 	// TODO: Clean up return type stuff.
@@ -1431,6 +1477,13 @@ private Variant invokeMethod(alias func, T, MethodParentKind parentType)(MethodM
 		return Variant(null);
 	else // Cast away from const to prevent Variant assignment issues. Quite sketchy.
 		return Variant(cast()result);
+}
+
+private template ReplaceInout(T) {
+	static if(is(T == inout))
+		alias ReplaceInout = typeof(cast(const)T.init);
+	else
+		alias ReplaceInout = T;
 }
 
 private void* getVirtualFunctionPointer(MethodParentKind parentType)(void* instance, TypeInfo ti, size_t vtblSlot, out size_t thisOffset) {
@@ -1482,10 +1535,52 @@ private void* getVirtualFunctionPointer(MethodParentKind parentType)(void* insta
 	}
 }
 
-private enum MethodParentKind {
-	unknown_,
-	interface_,
-	class_
+private ImplicitConversionType getImplicitConversionType(in TypeInfo from, in TypeInfo to) {
+	// TODO: I think inout is handled incorrectly here.
+	// Inout is supposed to apply the same qualifier for every type in the argument list, isn't it?
+	// So the first it binds to it remains as...
+	// Which would make the below wrong as it considers only a single parameter, so multiple inout substitutes can exist.
+	if(from == to)
+		return ImplicitConversionType.exact_;
+	// Aside from exact match, can conversion const, immutable, or non-const to inout.
+	// Can convert from inout to const only.
+	// Can convert from non-const to const.
+	// Nothing can implicitly remove shared.
+	// Note that TypeInfo_Shared, TypeInfo_Inout, and TypeInfo_Invariant, derive from TypeInfo_Const.
+	if(cast(TypeInfo_Shared)to || cast(TypeInfo_Shared)from)
+		return ImplicitConversionType.none_;
+	auto totic = cast(TypeInfo_Const)to;
+	// If to is non-const, nothing can implicitly const convert to it. Saves a bit of effort below.
+	if(totic is null)
+		return ImplicitConversionType.none_;
+	auto fromtic = cast(TypeInfo_Const)from;
+	// Already handled shared and inout above, so const yet not immutable means just const.
+	if(cast(TypeInfo_Inout)fromtic) {
+		if(cast(TypeInfo_Invariant)totic is null && totic && fromtic.next == totic.next)
+			return ImplicitConversionType.inout_;
+		// Otherwise is from is inout and to isn't simply const then nothing can convert to it.
+		return ImplicitConversionType.none_;
+	}
+	// Now to is inout, can convert from in any remaining situation (aka not shared).
+	if(cast(TypeInfo_Inout)totic && (totic.next == from || (fromtic && totic.next == fromtic.next)))
+		return ImplicitConversionType.inout_;
+	// Otherwise if neither are inout, from can convert to to iff from is non-const and to is const.
+	if(fromtic is null && totic && cast(TypeInfo_Invariant)totic is null && from == totic.next)
+		return ImplicitConversionType.const_;
+	// If from is non-const or is inout we can implicitly convert it to const.
+	if(totic && (totic.next == to || (fromtic && fromtic.next == totic.next)))
+		return ImplicitConversionType.const_;
+	return ImplicitConversionType.none_;
+} unittest {
+	assert(getImplicitConversionType(typeid(int), typeid(int)) == ImplicitConversionType.exact_);
+	assert(getImplicitConversionType(typeid(inout int), typeid(inout int)) == ImplicitConversionType.exact_);
+	assert(getImplicitConversionType(typeid(int), typeid(const int)) == ImplicitConversionType.const_);
+	assert(getImplicitConversionType(typeid(int), typeid(inout int)) == ImplicitConversionType.inout_);
+	assert(getImplicitConversionType(typeid(const int), typeid(inout int)) == ImplicitConversionType.inout_);
+	assert(getImplicitConversionType(typeid(immutable int), typeid(inout int)) == ImplicitConversionType.inout_);
+	assert(getImplicitConversionType(typeid(inout int), typeid(const int)) == ImplicitConversionType.inout_);
+	assert(getImplicitConversionType(typeid(inout int), typeid(immutable int)) == ImplicitConversionType.none_);
+	assert(getImplicitConversionType(typeid(int), typeid(string)) == ImplicitConversionType.none_);
 }
 
 private Variant getFieldValue(InstanceType, size_t fieldIndex)(ValueMetadata metadata, Variant instanceWrapper) {
@@ -1535,10 +1630,25 @@ private Variant getEnumConstant(T, string m)(ValueMetadata unused, Variant insta
 // For example, if FooBar derives from Foo and we have a variant storing Foo, we want
 // to be able to get it as an instance FooBar without risking a full coercion and string
 // conversions / parsing / such.
-private T as(T)(Variant inst) {
+// If stripConst is set and the stored value is const, inout, or immutable, it will be retrieved as T instead.
+// Note that shared is excluded and if T is shared stripConst will be ignored.
+private T as(T)(Variant inst, bool stripConst = false) {
 	// Variant does not allow getting or coercing when it stores null.
 	if(inst.type == typeid(null))
 		return T.init;
+	static if(!is(T == shared)) {
+		if(stripConst) {
+			TypeInfo type = inst.type;
+			if(cast(TypeInfo_Invariant)type)
+				return cast(T)asHelper!(immutable T)(inst);
+			else if(cast(TypeInfo_Const)type)
+				return cast(T)asHelper!(const T)(inst);
+		}
+	}
+	return asHelper!T(inst);
+}
+
+private T asHelper(T)(Variant inst) {
 	static if(is(typeof(inst.coerce!T))) {
 		if(cast(ClassInfo)inst.type) {
 			// We only do this for classes.
@@ -1905,7 +2015,7 @@ version(unittest) {
 		assert(metadata.invokeMethod("foo", instance, 4) == 4);
 		assert(metadata.findMethod("val") == MethodMetadata.init);
 		ValueMetadata val = metadata.findValue("val");
-		assert(val != MethodMetadata.init);
+		assert(val != ValueMetadata.init);
 		assert(val.getValue(instance) == 3);
 		val.setValue(instance, 6);
 		assert(val.getValue(instance) == 6);
@@ -2130,6 +2240,31 @@ version(unittest) {
 		assert(metadata.findValue("bar").modifiers == SymbolModifier.static_);
 		assert(metadata.findValue("bar").isStatic);
 		assert(metadata.getValue("bar", null) == 1);
+	}
+
+	// Test implicit conversions for finding the method to invoke.
+	unittest {
+		class Foo {
+			int foo(Foo f) { return 0; }
+			int foo(inout Foo f) { return 1; }
+			int foo(const Foo f) { return 2; }
+			int bartest() { return -1; }
+		}
+		import std.stdio;
+		auto metadata = createMetadata!Foo;
+		MethodMetadata mutableData = metadata.findMethod("foo", typeid(Foo));
+		MethodMetadata constData = metadata.findMethod("foo", typeid(const Foo));
+		MethodMetadata immutableData = metadata.findMethod("foo", typeid(immutable Foo));
+		assert(mutableData == metadata.children.methods[0]);
+		assert(immutableData == metadata.children.methods[1]);
+		assert(constData == metadata.children.methods[2]);
+		Foo inst = new Foo();
+		assert(mutableData.invoke(inst, inst) == 0);
+		assert(immutableData.invoke(inst, cast(immutable)inst) == 1);
+		assert(constData.invoke(inst, cast(const)inst) == 2);
+		assert(metadata.findMethod("foo", typeid(shared int)) == MethodMetadata.init);
+		assert(metadata.findMethod("foo", typeid(const shared int)) == MethodMetadata.init);
+		assert(metadata.invokeMethod("foo", inst, cast(immutable)inst) == 1);
 	}
 
 	// Test module header example.
