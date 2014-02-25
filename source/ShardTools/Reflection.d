@@ -853,16 +853,17 @@ TypeMetadata createMetadata(Type)() {
 		TypeMetadata existing = getStoredExisting(typeid(T), true);
 		if(existing != TypeMetadata.init)
 			return existing;
-		//static if(__traits(compiles, getType!T)) {
+		static if(__traits(compiles, getType!T)) {
+		//static if(!is(T == void[152]) && !is(T == core.thread.Thread) && T.stringof != "Standalone") {
 			auto result = getType!T;
 			//synchronized(typeid(TypeMetadata)) {
 			_typeData[typeid(T)] = StoredTypeMetadata(result);
 			//}
 			return result;
-		/+} else {
+		} else {
 			pragma(msg, "Warning: Internal Error - Failed to create metadata for " ~ T.stringof ~ " as getType!T failed to compile.");
 			return TypeMetadata.init;
-		}+/
+		}
 	}
 }
 
@@ -1600,7 +1601,10 @@ private void setFieldValue(InstanceType, size_t fieldIndex)(ValueMetadata metada
 	InstanceType* instance = unwrapVariantPointer!InstanceType(instanceWrapper);
 	if(instance is null)
 		throw new ReflectionException("Unable to set a value of a struct that was not passed by reference or pointer.");
-	instance.tupleof[fieldIndex] = valueWrapper.as!(typeof(instance.tupleof[fieldIndex]));
+	static if(is(InstanceType == const) || is(InstanceType == immutable))
+		throw new ReflectionException("Unable to modify const or immutable instance.");
+	else
+		instance.tupleof[fieldIndex] = valueWrapper.as!(typeof(instance.tupleof[fieldIndex]));
 }
 
 private Variant getPropertyValue(InstanceType)(ValueMetadata metadata, Variant instanceWrapper) {
@@ -1618,7 +1622,10 @@ private void setPropertyValue(InstanceType)(ValueMetadata metadata, Variant inst
 	InstanceType* inst = unwrapVariantPointer!InstanceType(instanceWrapper);
 	if(inst is null)
 		throw new ReflectionException("Unable to set a property on a struct that was not passed by reference or pointer.");
-	method.invokeInternal!(InstanceType)(inst, valueWrapper);
+	static if(is(InstanceType == const) || is(InstanceType == immutable))
+		throw new ReflectionException("Unable to modify const or immutable instance.");
+	else
+		method.invokeInternal!(InstanceType)(inst, valueWrapper);
 }
 
 private Variant getEnumConstant(T, string m)(ValueMetadata unused, Variant instance) {
@@ -1634,15 +1641,29 @@ private Variant getEnumConstant(T, string m)(ValueMetadata unused, Variant insta
 // Note that shared is excluded and if T is shared stripConst will be ignored.
 private T as(T)(Variant inst, bool stripConst = false) {
 	// Variant does not allow getting or coercing when it stores null.
-	if(inst.type == typeid(null))
-		return T.init;
+	if(inst.type == typeid(null)) {
+		/+// Hack to work around compiler bug causing this to try to do TypeInfo.init() which fails due to not being static.
+		// This is not scalable though because any type could define 'init' in theory.
+		//static if(is(T : TypeInfo))
+		static if(is(T == class) || is(T == interface))
+			return null;
+		else
+			return T.init;+/
+		// Hack to work around compiler bug causing linker errors when using T.init, as well as the above hack for TypeInfo.init.
+		T result;
+		return result;
+	}
 	static if(!is(T == shared)) {
 		if(stripConst) {
 			TypeInfo type = inst.type;
-			if(cast(TypeInfo_Invariant)type)
-				return cast(T)asHelper!(immutable T)(inst);
-			else if(cast(TypeInfo_Const)type)
-				return cast(T)asHelper!(const T)(inst);
+			static if(__traits(compiles, cast(T)asHelper!(immutable T)(inst))) {
+				if(cast(TypeInfo_Invariant)type)
+					return cast(T)asHelper!(immutable T)(inst);
+			}
+			static if(__traits(compiles, cast(T)asHelper!(const T)(inst))) {
+				if(cast(TypeInfo_Const)type)
+					return cast(T)asHelper!(const T)(inst);
+			}
 		}
 	}
 	return asHelper!T(inst);
