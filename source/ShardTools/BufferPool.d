@@ -15,6 +15,7 @@ public import ShardTools.Buffer;
 private import ShardTools.SortedList;
 public import std.outbuffer;
 private import std.container;
+import ShardTools.Udas;
 
 /// Provides access to a pool of reuseable buffers.
 /// All methods in this class are O(1), thread-safe, and lock-free.
@@ -162,6 +163,7 @@ private:
 	// It's not much overhead anyways considering you usally only have one buffer pool.
 	BufferCollection[NumBuffers] Buffers;	
 
+	@name("Index Calculations")
 	unittest {
 		assert(IndexForBuffer(0) == 0);
 		assert(IndexForBuffer(2) == 1);

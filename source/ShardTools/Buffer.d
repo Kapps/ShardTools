@@ -11,6 +11,7 @@ private import core.memory;
 private import std.math;
 private import std.c.stdlib;
 private import std.c.string;
+import ShardTools.Udas;
 
 
 /// Provides a reusable buffer of memory designed for efficient writes.
@@ -94,7 +95,10 @@ public:
 		GC.clrAttr(NewData.ptr, GC.BlkAttr.NO_SCAN);		
 		memcpy(NewData.ptr, _Data.ptr, _Position);
 		this._Data = NewData;
-	} unittest {
+	} 
+
+	@name("Reserving Data")
+	unittest {
 		Buffer b = new Buffer(4);
 		ubyte* Last = b._Data.ptr;
 		assert(b._Data.length == 4);
@@ -122,7 +126,10 @@ public:
 		if(ClearOldData)
 			memset(_Data.ptr, 0, _Position);
 		_Position = 0;		
-	} unittest {
+	} 
+
+	@name("Buffer Reuse")
+	unittest {
 		Buffer b = new Buffer();
 		b.Write(uninitializedArray!(ubyte[])(4096));
 		assert(b._Position == 4096);
@@ -161,7 +168,10 @@ public:
 			BytesRead += NextChunkSize;
 		}
 		return Result;
-	} unittest {
+	} 
+
+	@name("Splitting Buffers")
+	unittest {
 		Buffer FirstBuffer = new Buffer(8192);
 		FirstBuffer.Write(new ubyte[8192]);
 		Buffer[] Split = FirstBuffer.Split(2048, false);
@@ -220,7 +230,8 @@ public:
 		memcpy(BasePtr + uint.sizeof, Value.ptr, cast(uint)Value.length * T.sizeof); 
 		_Position += TotalSize;
 	}
-	
+
+	@name("Basic Writes")
 	unittest {
 		Buffer buff = new Buffer(4);
 		ubyte* OrigPtr = buff._Data.ptr;

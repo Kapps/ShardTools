@@ -4,6 +4,7 @@
 /// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.CaoList;
 import core.atomic;
+import ShardTools.Udas;
 
 /// A specialized concurrent append-only list that allows only sequential access.
 /// Once an item has been added to the list, it may never be removed.
@@ -54,6 +55,7 @@ struct CaoList(T) {
 	}
 }
 
+@name("CaoList Basic Usage")
 unittest {
 	CaoList!(int) vals;
 	vals.push(3);

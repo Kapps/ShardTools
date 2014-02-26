@@ -27,3 +27,13 @@ struct Ignore {
 struct Required {
 	bool value;
 }
+
+version(Have_tested) {
+	public import tested;
+	public alias name = tested.name;
+} else {
+	/// A basic stub for the name UDA that tested uses; exists only to prevent errors if tested is unavailable.
+	struct name {
+		string val;
+	}
+}

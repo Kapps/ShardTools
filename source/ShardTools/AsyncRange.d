@@ -17,6 +17,7 @@ import std.datetime;
 import core.time;
 import ShardTools.Untyped;
 import ShardTools.ExceptionTools;
+import ShardTools.Udas;
 
 /// Indicates the status of a producer in an AsyncRange.
 enum ProducerStatus {
@@ -117,6 +118,7 @@ private:
 /// Simple AsyncRange example to lazily copy between an array in the background.
 /// Under normal circumstances your data would not be in memory like this, but 
 /// rather loaded and stored asynchronously. This makes for a simpler example however.
+@name("AsyncRange Basic Usage")
 unittest {
 	enum size = 1_000_000;
 	int[] elements = iota(0, size).array;

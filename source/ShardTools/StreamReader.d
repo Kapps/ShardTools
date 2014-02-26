@@ -1,4 +1,4 @@
-﻿/// Contains a class that can read data from a stream of bytes.
+/// Contains a class that can read data from a stream of bytes.
 /// $(RED Scheduled to be deprecated upon completion of StreamOutput.)
 /// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
 /// Authors: Ognjen Ivkovic
@@ -7,6 +7,7 @@ module ShardTools.StreamReader;
 private import std.exception;
 import core.stdc.string;
 import std.traits;
+import ShardTools.Udas;
 
 /// Helper class to read a stream of bytes.
 class StreamReader  {
@@ -110,6 +111,7 @@ public:
 		return ReadArray!T(Count);
 	}
 
+	@name("StreamReader Basic Usage")
 	unittest {
 		string String = "abc";
 		int TestInt = 3;

@@ -8,6 +8,7 @@ import ShardTools.ExceptionTools;
 import std.exception;
 import core.stdc.string;
 import std.typecons;
+import ShardTools.Udas;
 
 mixin(MakeException("InvalidCastException", "The type stored in Untyped did not match the given type."));
 
@@ -143,6 +144,7 @@ version(unittest) {
 // TODO: Clean up below test and add it as documentation tests.
 
 // Verify basic usage.
+@name("Untyped Basic Usage")
 private unittest {
 	auto stored = Untyped(2);
 	assert(cast(int)stored == 2);

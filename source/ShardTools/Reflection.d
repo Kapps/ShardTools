@@ -63,6 +63,7 @@ import core.memory;
 import std.exception;
 import core.stdc.stdlib;
 import std.math;
+import ShardTools.Udas;
 
 /// Indicates the protection level of a symbol, such as private or public.
 enum ProtectionLevel {
@@ -853,8 +854,7 @@ TypeMetadata createMetadata(Type)() {
 		TypeMetadata existing = getStoredExisting(typeid(T), true);
 		if(existing != TypeMetadata.init)
 			return existing;
-		static if(__traits(compiles, getType!T)) {
-		//static if(!is(T == void[152]) && !is(T == core.thread.Thread) && T.stringof != "Standalone") {
+		static if(__traits(compiles, getType!T) || is(T == SymbolContainer) || is(T == TypeMetadata)) {
 			auto result = getType!T;
 			//synchronized(typeid(TypeMetadata)) {
 			_typeData[typeid(T)] = StoredTypeMetadata(result);
@@ -1572,7 +1572,10 @@ private ImplicitConversionType getImplicitConversionType(in TypeInfo from, in Ty
 	if(totic && (totic.next == to || (fromtic && fromtic.next == totic.next)))
 		return ImplicitConversionType.const_;
 	return ImplicitConversionType.none_;
-} unittest {
+} 
+
+@name("Implicit Conversion Type")
+unittest {
 	assert(getImplicitConversionType(typeid(int), typeid(int)) == ImplicitConversionType.exact_);
 	assert(getImplicitConversionType(typeid(inout int), typeid(inout int)) == ImplicitConversionType.exact_);
 	assert(getImplicitConversionType(typeid(int), typeid(const int)) == ImplicitConversionType.const_);
@@ -1982,6 +1985,7 @@ version(unittest) {
 	// Full functionality tests.
 
 	// Basic struct tester:
+	@name("Struct Metadata")
 	unittest {
 		TypeMetadata metadata = createMetadata!ReflectionTestStruct;
 		assert(metadata.kind == TypeKind.struct_);
@@ -2021,6 +2025,7 @@ version(unittest) {
 	}
 
 	// Basic class tester:
+	@name("Class Metadata")
 	unittest {
 		TypeMetadata metadata = createMetadata!ReflectionTestClass;
 		assert(metadata.base == typeid(Object));
@@ -2096,6 +2101,7 @@ version(unittest) {
 	}
 
 	// Interface tests:
+	@name("Interface Metadata")
 	unittest {
 		TypeMetadata metadata = createMetadata!ReflectionTestInterface;
 		ReflectionTestInterface instance = new ReflectionTestClass(10);
@@ -2109,6 +2115,7 @@ version(unittest) {
 	}
 
 	// Enum tests:
+	@name("Enum Metadata")
 	unittest {
 		TypeMetadata metadata = createMetadata!ReflectionTestEnum;
 		assert(metadata.name == "ReflectionTestEnum");
@@ -2137,6 +2144,7 @@ version(unittest) {
 	}
 
 	// UDA tests
+	@name("UDA Metadata")
 	unittest {
 		auto metadata = createMetadata!ReflectionUdaTest;
 		auto field = metadata.findValue("val");
@@ -2163,6 +2171,7 @@ version(unittest) {
 	}
 
 	// Nested type tests
+	@name("Nested types [disabled]")
 	unittest {
 		auto parentData = createMetadata!ReflectionTestNestedClass;
 		assert(parentData.children.values.length == 1);
@@ -2180,6 +2189,7 @@ version(unittest) {
 	}
 
 	// Test various things with variants.
+	@name("Variants")
 	unittest {
 		auto structData = createMetadata!ReflectionTestStruct;
 		ReflectionTestStruct s = ReflectionTestStruct("abc");
@@ -2208,6 +2218,7 @@ version(unittest) {
 	}
 
 	// Test dynamic type casting.
+	@name("Dynamic Type Casting")
 	unittest {
 		auto intMetadata = createMetadata!int;
 		Variant initial = "3";
@@ -2229,6 +2240,7 @@ version(unittest) {
 	}
 
 	// Test type qualifiers.
+	@name("Type Qualifiers")
 	unittest {
 		static class Foo { }
 		inout(Foo) foo(inout Foo f) { 
@@ -2247,6 +2259,7 @@ version(unittest) {
 	}
 
 	// Test symbol modifiers.
+	@name("Symbol Modifiers")
 	unittest {
 		class Foo {
 			void foo() { }
@@ -2263,7 +2276,7 @@ version(unittest) {
 		assert(metadata.getValue("bar", null) == 1);
 	}
 
-	// Test implicit conversions for finding the method to invoke.
+	@name("Method Implicit Conversions")
 	unittest {
 		class Foo {
 			int foo(Foo f) { return 0; }
@@ -2290,6 +2303,7 @@ version(unittest) {
 
 	// Test module header example.
 	// Would be nice if documented unittests worked on module headers.
+	@name("Module Documentation")
 	unittest {
 		class Foo {
 			int _val;

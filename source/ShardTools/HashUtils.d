@@ -26,7 +26,3 @@ hash_t fnvHash(ubyte[] data) {
 	}
 	return result;
 }
-
-unittest {
-
-}
