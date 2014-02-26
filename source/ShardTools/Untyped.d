@@ -86,17 +86,28 @@ struct Untyped {
 
 	bool opEquals(T)(T other) {
 		static if(is(T == Untyped)) {
-			// TODO: This is more problematic thanks to large structs.
-			// We can't just compare TypeInfo and data because it's a pointer.
-			// Everything else would work fine except large structs.
-			// We don't know the size to compare the bytes directly either.
-			//static assert(0, "Comparing two instances of Untyped is not yet supported.");
-			throw new NotImplementedError("Comparing two instances of Untyped is not yet supported.");
+			if(other.StoredType != this.StoredType)
+				return false;
+			if(auto ci = cast(ClassInfo)StoredType) {
+				// Turns out TypeInfo_Struct can be casted to ClassInfo...
+				// But in this case their vtbl is null, so we can differ by using that.
+				// For classes we can't use TypeInfo.equals as it always seems to be true.
+				if(ci.vtbl is null)
+					return cast(Object)Data == cast(Object)other.Data;
+			}
+			// Otherwise it's a struct/array/etc, and we can use TypeInfo.equals to check.
+			void* a, b;
+			if(StoredType.tsize <= (void*).sizeof)
+				a = &Data, b = &other.Data;
+			else
+				a = Data, b = other.Data;
+			return StoredType.equals(a, b);
+		} else {
+			T currVal;
+			if(!this.tryGet!(T)(currVal))
+				return false;
+			return currVal == other;
 		}
-		T currVal;
-		if(!this.tryGet!(T)(currVal))
-			return false;
-		return currVal == other;
 	}
 
 	void opAssign(T)(T rhs) {
@@ -151,6 +162,8 @@ private unittest {
 	assert(stored == 2);
 	assert(stored != 3);
 	assert(stored != 2f);
+	assert(stored == Untyped(2));
+	assert(stored != Untyped(2f));
 	// Below requires comparing Untyped instances to be fixed.
 	/+assert(stored != Untyped(3));
 	assert(stored == Untyped(2));+/
@@ -163,13 +176,16 @@ private unittest {
 	auto c = Untyped(a);
 	assert(cast(Object)c == a);
 	assert(cast(Object)c != b);
+	assert(c == Untyped(a));
 	assert(c == a);
 	assert(c != b);
 	Untyped d = null;
 	assert(d == null);		
+	assert(d != c);
 	Untyped f = 3;
 	assert(f == 3);
-	//assert(f == Untyped(3));
+	assert(f != d && f != c);
+	assert(f == Untyped(3));
 	assert(f.get!int == 3);
 
 	auto dbgcls = new UntypedDebugClass();
