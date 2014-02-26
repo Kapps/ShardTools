@@ -55,7 +55,7 @@ struct CaoList(T) {
 	}
 }
 
-@name("CaoList Basic Usage")
+@name("Basic Usage")
 unittest {
 	CaoList!(int) vals;
 	vals.push(3);

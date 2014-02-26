@@ -111,7 +111,7 @@ public:
 		return ReadArray!T(Count);
 	}
 
-	@name("StreamReader Basic Usage")
+	@name("Basic Usage")
 	unittest {
 		string String = "abc";
 		int TestInt = 3;

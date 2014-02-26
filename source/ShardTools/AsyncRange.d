@@ -118,7 +118,7 @@ private:
 /// Simple AsyncRange example to lazily copy between an array in the background.
 /// Under normal circumstances your data would not be in memory like this, but 
 /// rather loaded and stored asynchronously. This makes for a simpler example however.
-@name("AsyncRange Basic Usage")
+@name("Basic Usage")
 unittest {
 	enum size = 1_000_000;
 	int[] elements = iota(0, size).array;

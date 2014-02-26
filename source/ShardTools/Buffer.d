@@ -128,7 +128,7 @@ public:
 		_Position = 0;		
 	} 
 
-	@name("Buffer Reuse")
+	@name("Reusing Buffers")
 	unittest {
 		Buffer b = new Buffer();
 		b.Write(uninitializedArray!(ubyte[])(4096));
