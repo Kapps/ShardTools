@@ -33,7 +33,7 @@ struct CaoList(T) {
 	}
 
 	int opApply(int delegate(ref T) dg) {
-		for(Node* curr = head; curr !is null; curr = curr.next) {
+		for(auto curr = head; curr !is null; curr = curr.next) {
 			int val = dg(curr.value);
 			if(val != 0)
 				return val;

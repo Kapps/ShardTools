@@ -854,20 +854,26 @@ TypeMetadata createMetadata(Type)() {
 		TypeMetadata existing = getStoredExisting(typeid(T), true);
 		if(existing != TypeMetadata.init)
 			return existing;
-		static if(__traits(compiles, getType!T) || is(T == SymbolContainer) || is(T == TypeMetadata)) {
+		//static if(__traits(compiles, getType!T)) {
 			auto result = getType!T;
 			//synchronized(typeid(TypeMetadata)) {
 			_typeData[typeid(T)] = StoredTypeMetadata(result);
 			//}
 			return result;
-		} else {
+		/+} else {
 			pragma(msg, "Warning: Internal Error - Failed to create metadata for " ~ T.stringof ~ " as getType!T failed to compile.");
 			return TypeMetadata.init;
-		}
+		}+/
 	}
 }
 
-private TypeMetadata getType(T)() {
+private TypeMetadata getType(T)() if(is(T == Symbol) || is(T == TypeMetadata)) {
+	// Can't generate metadata for types from this module.
+	pragma(msg, "Warning: Skipping metadata for ", T.stringof, " due to likely linker errors.");
+	return TypeMetadata.init;
+}
+
+private TypeMetadata getType(T)() if(!is(T == Symbol) && !is(T == TypeMetadata)) {
 	Symbol symbol = getSymbol!T;
 	static if(isPrimitive!T && !is(T == enum)) {
 		SymbolContainer symbols = SymbolContainer.init;
@@ -1078,6 +1084,15 @@ Variant createInstance(ArgTypes...)(TypeMetadata metadata, ArgTypes args) {
 			return retResult;
 		}
 	}
+}
+
+/// Enforces that the given metadata is a real value as opposed to the init value returned when a given member does not exist.
+/// If the member does not exist and thus $(D metadata) is invalid, a ReflectionException is thrown.
+/// The same metadata passed instance passed in is returned.
+@property auto assumed(T)(ref T metadata) {
+	if(metadata == T.init)
+		throw new ReflectionException("The metadata for the value was not found.");
+	return metadata;
 }
 
 private enum ConversionKind {
@@ -1794,7 +1809,8 @@ private template isVariant(T) {
 	enum isVariant = is(Unqual!T == Variant);
 }
 
-private template fieldIndex(T, string field) {
+/// Returns the index for the field with the given name on type $(D T).
+template fieldIndex(T, string field) {
 	static if(is(T == interface))
 		enum fieldIndex = -1;
 	else {

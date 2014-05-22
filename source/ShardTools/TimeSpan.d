@@ -1,5 +1,4 @@
-/// Contains a struct for representing periods of time.
-/// This module is deprecated with the addition of std.datetime.Duration / core.time.TickDuration.
+/// Contains a struct for representing periods of time as floating point values.
 /// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
 /// Authors: Ognjen Ivkovic
 /// Copyright: © 2013 Ognjen Ivkovic
@@ -9,119 +8,111 @@ import core.time;
 import std.conv;
 import std.stdio;
 
-// TODO: Now that dur and such are in, phase this out?
-
-/// A struct used to represent a period of time.
-/// $(RED This struct is deprecated; new code should use std.datetime.Duration or core.time.TickDuration.)
+/// A struct used to represent a total period of time as floating point values.
+/// All operations return the total value, never the specific unit. 
+/// For example 2 seconds 500 milliseconds would result in a $(D seconds) value of 2.5.
+/// Where integer values are desired, $(D core.time.Duration) or ($D core.time.TickDuration) should be preferred.
 struct TimeSpan {
-
+	
 public:	
-	/// Instantiates a new instance of the TimeSpan object.
-	/// Params:
-	///		TickCount = The number of ticks in this TimeSpan.
-	this(double TickCount) {
-		this.TickCount = TickCount;	
+	/// Instantiates a new instance of the TimeSpan object from either a given number of ticks or a TickDuration.
+	this(long tickCount) {
+		this(TickDuration(tickCount));
 	}
 	
-	/// Adds two TimeSpans together.
-	///	Params:
-	///		first = The first TimeSpan.
-	///		second = The second TimeSpan.
-	static TimeSpan Add(const TimeSpan first, const TimeSpan second) {
-		return TimeSpan(first.TickCount + second.TickCount);
+	/// ditto
+	this(TickDuration duration) {
+		this.duration = duration;
 	}
-
+	
+	
 	/// Returns the total number of days in this TimeSpan.
-	@property double Days() const {
-		return Hours / 24;
+	@property double days() const {
+		return hours / 24;
 	}
 	
 	/// Returns the total number of hours in this TimeSpan.
-	@property double Hours() const {
-		return Minutes / 60;
+	@property double hours() const {
+		return minutes / 60;
 	}
-
+	
 	/// Returns the total number of minutes contained in this TimeSpan.
-	@property double Minutes() const {
-		return Seconds / 60;
+	@property double minutes() const {
+		return seconds / 60;
 	}
 	
 	/// Returns the total number of seconds contained in this TimeSpan.
-	@property double Seconds() const {		
-		return TickCount / cast(double)TickDuration.ticksPerSec;
+	@property double seconds() const {		
+		return duration.to!("seconds", double);
 	}
 	
 	/// Returns the total number of milliseconds contained in this TimeSpan.
-	@property double Milliseconds() const {		
-		return Seconds * 1000;
+	@property double msecs() const {		
+		return seconds * 1000;
 	}
 	
 	/// Returns the total number of ticks contained in this TimeSpan.
-	@property double Ticks() const {
-		return TickCount;
+	@property long ticks() const {
+		return duration.length;
 	}
 	
-	/// Compares the specified TimeSpans.
-	/// Params:
-	///		other = The TimeSpan to compare to.	
-	int opCmp(TimeSpan other) const {
-		return TickCount > other.TickCount ? 1 : TickCount == other.TickCount ? 0 : -1;
+	/// 
+	int opCmp(in TimeSpan other) const {
+		return duration.opCmp(other.duration);
 	}
 	
-	TimeSpan opBinary(string Op)(in TimeSpan Other) const {
-		TimeSpan Result = this;
-		mixin(BinaryMixin("Result", "Other", Op));
-		return Result;
+	///
+	TimeSpan opBinary(string Op)(in TimeSpan other) const {
+		TimeSpan result = this;
+		mixin(binaryMixin("result", "other", Op));
+		return result;
 	}
-
-	TimeSpan opOpAssign(string Op)(in TimeSpan Other) {
-		mixin(BinaryMixin("this", "Other", Op));
+	
+	///
+	TimeSpan opOpAssign(string op)(in TimeSpan other) {
+		mixin(binaryMixin("this", "other", op));
 		return this;
 	}
-
-	TimeSpan opAssign(in TimeSpan Other) {
-		this.TickCount = Other.TickCount;
+	
+	///
+	TimeSpan opAssign(in TimeSpan other) {
+		this.duration = other.duration;
 		return this;
 	}
-
-	private static string BinaryMixin(string Left, string Right, string Op) {
-		return Left ~ ".TickCount " ~ Op ~ "= " ~ Right ~ ".TickCount;";
+	
+	private static string binaryMixin(string left, string right, string op) {
+		return left ~ ".duration " ~ op ~ "= " ~ right ~ ".duration;";
 	}
 	
 	/// Returns a string representation of this object.
 	string toString() const {
-		// TODO: Seconds > 1 ? 00:00:00.000 : 561 milliseconds
-		if(Minutes > 1)
-			return to!string(Minutes) ~ " minutes";
-		if(Seconds > 1)
-			return to!string(Seconds) ~ " seconds";
-		return to!string(Milliseconds)  ~ " milliseconds";
+		return (cast(Duration)duration).text;
 	}
 	
 	/**
 	 * Creates a new TimeSpan from the specified number of ticks.
-	 * Params: TickCount = The number of ticks to create the TimeSpan with.
-	*/
-	static TimeSpan FromTicks(double TickCount) {
-		return TimeSpan(TickCount);
+	 * Params: tickCount = The number of ticks to create the TimeSpan with.
+	 */
+	static TimeSpan fromTicks(long tickCount) {
+		return TimeSpan(tickCount);
 	}
 	
 	/**
 	 * Creates a new TimeSpan from the specified number of milliseconds.
-	 * Params: Milliseconds = The number of milliseconds to create the TimeSpan with.
-	*/
-	static TimeSpan FromMilliseconds(double Milliseconds) {	
-		return TimeSpan.FromSeconds(Milliseconds / 1000);
+	 * Params: milliseconds = The number of milliseconds to create the TimeSpan with.
+	 */
+	static TimeSpan fromMilliseconds(double milliseconds) {	
+		return TimeSpan.fromSeconds(milliseconds / 1000);
 	}
 	
 	/**
 	 * Creates a new TimeSpan from the specified number of seconds.
-	 * Params: Seconds = The number of seconds to create the TimeSpan with.
-	*/
-	static TimeSpan FromSeconds(double Seconds) {
-		return TimeSpan(Seconds * TickDuration.ticksPerSec);
+	 * Params: seconds = The number of seconds to create the TimeSpan with.
+	 */
+	static TimeSpan fromSeconds(double seconds) {
+		return TimeSpan.fromTicks(cast(long)(seconds * TickDuration.ticksPerSec));
 	}
 	
 private:	
-	double TickCount = 0;		
+	TickDuration duration;
 }

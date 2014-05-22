@@ -6,7 +6,7 @@
 	"copyright": "Copyright © 2013, Ognjen Ivkovic",
 	"license": "Boost",
 	"dependencies": {
-		"tested": { "version": "~master", "optional": true },
+		"tested": { "version": "~master", "optional": false },
 		"shardmath": { "version": "~master", "optional": true }
 	},
 	"targetType": "library"

@@ -2,6 +2,8 @@
 module ShardTools.Property;
 import std.traits;
 
+// TODO: Observable property.
+
 /+
 /// Provides information on how to generate a property.
 enum PropertyFlags {

@@ -43,6 +43,8 @@ enum CommandLineFlags {
 T getCommandLineOptions(T)(ref string[] args, CommandLineFlags flags = CommandLineFlags.none) {
 	enforce(args.length > 0);
 	auto metadata = createMetadata!T;
+	if(metadata == TypeMetadata.init)
+		throw new ReflectionException("Failed to generate reflection for " ~ T.stringof ~ " so command line options are not available.");
 	T instance = metadata.createInstance().get!T;
 	foreach(value; usedValues(metadata)) {
 		string name = getArgName(value);

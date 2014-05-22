@@ -28,6 +28,15 @@ final class BufferPool  {
 
 // TODO: Ideally this class shouldn't be needed at all. Instead, usinga Buffer should handle this internally.
 // That way we don't have to manually release memory.
+
+// TODO: Rewrite the acquire / release methods to not be terrible.
+// It rather defeats the purpose at the moment since ConcurrentStack allocates.
+// Instead, allocate an extra header along with the memory allocated for the buffer when needed.
+// Essentially, allocate __traits(classInstanceSize, Buffer) + BufferHeader.sizeof + RoundedCapacity,
+// then pass in from RoundedCapacity to end for array, emplace buffer at __traits spot, and initialize
+// struct containing next pointer at BufferHeader.
+// Now we have just one allocation if empty (unless we go over Capacity), and to get when not empty none.
+
 public:
 
 	shared static this() {		

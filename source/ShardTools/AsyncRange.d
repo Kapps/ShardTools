@@ -18,6 +18,7 @@ import core.time;
 import ShardTools.Untyped;
 import ShardTools.ExceptionTools;
 import ShardTools.Udas;
+import core.atomic;
 
 /// Indicates the status of a producer in an AsyncRange.
 enum ProducerStatus {
@@ -101,8 +102,14 @@ protected:
 		if(!_isAborted) {
 			if(_waitToComplete)
 				NotifyComplete(CompletionType.Successful, Untyped.init);
-			else
-				_producer(_producerState, &onProducerComplete);
+			else {
+				// HACK: Every X consumes, we'll invoke the producer on a TaskPool thread.
+				// This is because otherwise we risk a stack overflow if the consumer and producer both complete in the same method.
+				if((atomicOp!"+="(_consumesComplete, 1) % 25) == 0)
+					taskPool.put(task(_producer, _producerState, &onProducerComplete));
+				else
+					_producer(_producerState, &onProducerComplete);
+			}
 		}
 	}
 
@@ -113,6 +120,7 @@ private:
 	Untyped _consumerState;
 	bool _isAborted = false;
 	bool _waitToComplete = false;
+	shared size_t _consumesComplete = 0;
 }
 
 /// Simple AsyncRange example to lazily copy between an array in the background.

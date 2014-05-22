@@ -6,15 +6,10 @@ module ShardTools.ConcurrentStack;
 private import core.atomic;
 
 /// Provides a Concurrent Stack that uses cas operations to allow operations to be performed in a lock-free fashion.
-/// Note that this implementation does not attempt to work around the ABA problem.
-/// BUGS:
-///		Manual memory management of stored values is not recommended because this implementation suffers from the ABA problem.
-///		Other issues may occur as a result as well, but are much less likely.
+/// Note that this implementation does not attempt to work around the ABA problem, so manual memory management of stored values is not recommended.
 class ConcurrentStack(T)  {
 
 public:
-
-	// TODO: Check to make sure ABA problem is fine with garbage collection.
 
 	/// Initializes a new instance of the ConcurrentStack object.
 	this() {

@@ -30,7 +30,7 @@ class Timer {
 	/// Returns the total amount of time that has elapsed while the timer was tracking, from when this timer was created.
 	/// This method includes times from previous starts and stops. To get the amount of time since the last start, use Elapsed.
 	@property TimeSpan Total() const {
-		return TimeSpan(_Elapsed.Ticks + Elapsed.Ticks);
+		return TimeSpan(_Elapsed.ticks + Elapsed.ticks);
 	}
 	
 	/// Returns the total amount of time that has passed since the last call to Start.
@@ -38,7 +38,7 @@ class Timer {
 	@property TimeSpan Elapsed() const {			
 		if(!HasStarted)
 			return TimeSpan(0);		
-		TimeSpan Result = TimeSpan.FromSeconds(sw.peek().to!("seconds", double));	
+		TimeSpan Result = TimeSpan(sw.peek());
 		return Result;
 	}
 	
@@ -47,10 +47,10 @@ class Timer {
 	TimeSpan Stop() {		
 		if(!HasStarted)
 			return TimeSpan(0);									
-		TimeSpan current = TimeSpan.FromSeconds(sw.peek().to!("seconds", double));	
-		sw.stop();			
+		TimeSpan current = TimeSpan(sw.peek());
+		sw.stop();
 		sw.reset();
-		_Elapsed = TimeSpan.Add(current, _Elapsed);				
+		_Elapsed = current + _Elapsed;
 		return current;
 	}
 	
@@ -59,9 +59,9 @@ class Timer {
 	TimeSpan Tick() {
 		if(!HasStarted)
 			return TimeSpan(0);		
-		TimeSpan ElapsedTime = TimeSpan.FromSeconds(sw.peek().to!("seconds", double));	
+		TimeSpan ElapsedTime = TimeSpan(sw.peek());
 		sw.reset();			
-		_Elapsed = TimeSpan.Add(_Elapsed, ElapsedTime);
+		_Elapsed = _Elapsed + ElapsedTime;
 		return ElapsedTime;
 	}
 	
@@ -71,18 +71,18 @@ class Timer {
 		result.Start();
 		return result;
 	}
-
+	
 	/// Stops the timer and prints the output to the console.
 	/// Params:
 	/// 	Identifier = An identifier to associate with this operation that was being timed.
 	TimeSpan StopPrint(string Identifier) {
 		TimeSpan Time = Stop();
-		writefln(Identifier ~ " elapsed time was " ~ to!string(Time.Milliseconds) ~ " milliseconds.");
+		writefln(Identifier ~ " elapsed time was " ~ to!string(Time.msecs) ~ " milliseconds.");
 		return Time;
 	}
 	
 private:
 	TimeSpan _Elapsed;
 	StopWatch sw;	
-	bool HasStarted = false;	
+	bool HasStarted = false;
 }

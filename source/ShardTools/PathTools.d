@@ -256,7 +256,6 @@ public:
 	}	
 	
 	/// Returns the relative path required to reach EndPath from StartPath.
-	/// Does not include a trailing separator.
 	/// Params:
 	///		EndPath = The target path to reach.
 	///		StartPath = The path to start from.	
@@ -271,28 +270,25 @@ public:
 			return null;				
 		} else {			*/			
 			if(!IsAbsolute(EndPath))
-				return cast(inout)EndPath.dup;			
+				return cast(inout)EndPath.dup;	
 			string Relative = relativePath(cast(immutable)EndPath, cast(immutable)MakeAbsolute(StartPath));
 			if(Relative.length == 0 || Relative == EndPath)
-				return null;					
-			while(Relative[$-1] == '\\' || Relative[$-1] == '/')
-				Relative = Relative[0..$-1];
+				return null;
 			return cast(inout)Relative.dup;
 		//}
 	}	
 
-	unittest {		
-		/*version(Windows) {
+	/+unittest {		
+		version(Windows) {
 			EnforceEqual(GetRelativePath("D:\\Testing\\Test.exe", "D:\\testing"), "Test.exe");			
 			EnforceEqual(GetRelativePath("D:\\Testing\\Test.exe", "C:\\Test"), cast(char[])null);
 			EnforceEqual(GetRelativePath("D:\\RandomTest.exe", "D:\\Testing\\SomeTest\\RandomTest.exe"), "..\\..\\..\\RandomTest.exe");
 		} else {
-			EnforceEqual(GetRelativePath("/Testing/Test.exe", "/testing"), "Test.exe");
+			EnforceEqual(GetRelativePath("/Testing/Test.exe", "/Testing"), "Test.exe");
 			EnforceEqual(GetRelativePath("/Testing/Test.exe", "/Test"), cast(char[])null);
 			EnforceEqual(GetRelativePath("/RandomTest.exe", "/Testing/SomeTest/RandomTest.exe"), "../../../RandomTest.exe");
-		}*/
-		// Above don't work since not real files.
-	}
+		}
+	}+/
 		
 	/// Returns the current working directory.
 	@property static string CurrentDirectory() { // TODO: Make thread safe.

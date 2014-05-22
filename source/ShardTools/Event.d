@@ -1,4 +1,5 @@
 /// Represents a collection of delegates to be invoked dynamically.
+/// $(RED This class' implementation is generally poor and may be changed to a struct or deprecated in the future.)
 /// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
 /// Authors: Ognjen Ivkovic
 /// Copyright: © 2013 Ognjen Ivkovic
@@ -9,11 +10,11 @@ private import ShardTools.Buffer;
 private import std.traits;
 private import ShardTools.List;
 
-/// Represents an event with zero or more parameters, and optionally a return value.
-/// This class is thread safe.
+/// Provides an Event that takes no parameters and returns nothing.
 alias Event!(void) ActionEvent;
 
-/// ditto
+/// Represents an event with zero or more parameters, and optionally a return value.
+/// This class is thread safe.
 class Event(RetValue, Params...) {		
 
 	alias RetValue delegate(Params) CallbackType;
@@ -59,6 +60,9 @@ class Event(RetValue, Params...) {
 		// So... we are going to use a whole lot of manual memory management and hacks.
 		// This could all be solved by a thread-safe singly linked list... but that's more complicated and may not solve the issue really.
 		// TODO: Eliminate this. It was a stupid attempt at solving a problem that doesn't really exist.
+
+		// TODO: This is an awful implementation that allocates needlessly.
+		// The invoking outside the lock is a good idea though, as otherwise we may have deadlocks potentially.
 		CallbackType[] Pointers;
 		Buffer PointerBuffer = BufferPool.Global.Acquire(this.Callbacks.Count * CallbackType.sizeof);
 		scope(exit)

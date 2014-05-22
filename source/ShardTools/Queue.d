@@ -19,11 +19,6 @@ final class Queue(T, bool ThreadSafe = false) {
 
 public:
 
-	this() {
-		static if(ThreadSafe)
-			Lock = new SpinLock();
-	}
-
 	/// Gets the number of elements stored within this queue.
 	size_t Count() {
 		return _Count;
@@ -36,8 +31,10 @@ public:
 			Lock.lock();		
 		if(_Count == 0)
 			Tail = Head = Element;
-		else
+		else {
 			Tail.Next = Element;		
+			Tail = Element;
+		}
 		_Count++;		
 		static if(ThreadSafe)
 			Lock.unlock();
@@ -48,8 +45,10 @@ public:
 		QueueElement* Element = CreateElement(Item);
 		static if(ThreadSafe)
 			Lock.lock();
-		Element.Next = Head;		
+		Element.Next = Head;
 		Head = Element;
+		if(_Count == 0)
+			Tail = Head;
 		_Count++;
 		static if(ThreadSafe)
 			Lock.unlock();
@@ -68,11 +67,12 @@ public:
 		auto Element = Head;
 		if(_Count == 1)
 			Tail = null;
+		assert(Head, "Head node was null and Count was not 0.");
 		Head = Head.Next;				
 		_Count--;
+		Value = Element.Data;
 		static if(ThreadSafe)
 			Lock.unlock();
-		Value = Element.Data;
 		return true;					
 	}
 
@@ -112,7 +112,7 @@ private:
 	QueueElement* Head; // The first item enqueued.
 	static if(ThreadSafe) {
 		// TODO: Due to lock contention, we may be better off using a Mutex.
-		SpinLock Lock;
+		SlimSpinLock Lock;
 	}
 
 	struct QueueElement {
@@ -122,7 +122,9 @@ private:
 
 	QueueElement* CreateElement(T Value) nothrow {
 		QueueElement* Element = cast(QueueElement*)malloc(QueueElement.sizeof);
-		Element.Data = Value;		
+		assert(Element);
+		Element.Data = Value;
+		Element.Next = null;
 		GC.addRoot(Element);
 		return Element;
 	}
