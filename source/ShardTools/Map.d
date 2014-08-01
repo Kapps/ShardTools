@@ -85,8 +85,14 @@ public:
 		return Get(Key);
 	}
 
-	int opApply(int delegate(ref Key, ref Value) dg) {
-		return Elements.opApply(dg);
+	int opApply(int delegate(Key, ref Value) dg) {
+		//return Elements.opApply(dg);
+		foreach(Key, ref Value; Elements) {
+			int res = dg(Key, Value);
+			if(res != 0)
+				return res;
+		}
+		return 0;
 	}
 
 	/// Removes all of the elements in this collection.

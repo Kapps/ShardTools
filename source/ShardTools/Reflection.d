@@ -179,46 +179,10 @@ struct Symbol {
 		return _modifiers;
 	}
 
-	mixin(getIsFlagsMixin!(SymbolModifier, "modifiers"));
-
 	/// Returns a duplicate of the array containing any attributes that apply to this symbol.
-	@property Variant[] attributes() pure {
+	@property Variant[] attributes() {
 		// TODO: Don't duplicate, use a readonly range instead.
 		return _attributes.dup;
-	}
-
-	/// Indicates if this symbol has one or more attributes of the given type.
-	/// Note that this must be the exact type of the attribute.
-	bool hasAttribute(TypeInfo type) {
-		foreach(ref attrib; _attributes) {
-			if(attrib.type == type)
-				return true;
-		}
-		return false;
-	}
-
-
-	/// Returns the last specified attribute that matches type T exactly.
-	/// If no attribute is found matching that type, defaultValue is evaluated and returned.
-	/// For convenience, if the attribute contains only a single field, defaultValue may be that field.
-	/// In this case, the value of the field will be returned instead.
-	U findAttribute(T, U)(lazy U defaultValue)
-			if(is(T == U) || (__traits(compiles, T.tupleof) && T.tupleof.length == 1 && is(U == typeof(T.tupleof[0])))) {
-
-		foreach(ref attrib; retro(_attributes)) {
-			if(attrib.type == typeid(T)) {
-				static if(is(T == U))
-					return attrib.get!T;
-				else
-					return attrib.get!T.tupleof[0];
-			}
-		}
-		return defaultValue();
-	}
-
-	/// ditto
-	T findAttribute(T)(lazy T defaultValue = T.init) {
-		return findAttribute!(T, T)(defaultValue());
 	}
 
 	private string _name;
@@ -227,45 +191,118 @@ struct Symbol {
 	SymbolModifier _modifiers;
 }
 
-/// Provides information about a module and the symbols it contains.
-struct ModuleMetadata {
+private struct CtSymbol(Tv...) if(Tv.length == 1) {
+	alias T = Tv[0];
 
-	this(string name, string packageName, SymbolContainer children) {
-		this._name = name;
-		this._packageName = packageName;
-		this._children = children;
+	@property string name() {
+		static if(is(typeof(isPrimitive!T)) && isPrimitive!T)
+			return T.stringof;
+		else
+			return __traits(identifier, T);
 	}
 
-	/// Gets the name of this module, excluding the package.
-	@property string name() const pure nothrow {
-		return _name;
+	@property ProtectionLevel protection() {
+		return getProtection!T;
 	}
 
-	/// Gets the name of this package. This can be null if this module has no package.
-	@property string packageName() const pure nothrow {
-		return _packageName;
+	@property SymbolModifier modifiers() {
+		SymbolModifier modifiers = SymbolModifier.none_;
+		static if(__traits(isStaticFunction, T))
+			modifiers |= SymbolModifier.static_;
+		return modifiers;
 	}
 
-	/// Returns the qualified name of this module (that is, the package name combined with the module name).
-	@property string qualifiedName() const pure nothrow {
-		return packageName.length == 0 ? name : (packageName ~ "." ~ name);
+	@property auto attributes() {
+		static if((is(typeof(isPrimitive!T)) && isPrimitive!T) || __traits(getAttributes, T).length == 0)
+			return (int[]).init;
+		else
+			return [__traits(getAttributes, T)];
 	}
-
-	/// Gets the symbols that this module contains.
-	@property SymbolContainer children() {
-		return _children;
-	}
-
-	string toString() const pure nothrow {
-		return qualifiedName;
-	}
-
-private:
-	string _name;
-	string _packageName;
-	SymbolContainer _children;
-	// TODO: Find a way to get ModuleInfo and store that, and store imported modules that way.
 }
+
+/// Indicates if this symbol has one or more attributes of the given type.
+/// Note that this must be the exact type of the attribute.
+bool hasAttribute(Symbol sym, TypeInfo type) {
+	foreach(ref attrib; sym.attributes) {
+		if(attrib.type == type)
+			return true;
+	}
+	return false;
+}
+
+/// Ditto
+bool hasAttribute(U)(Symbol sym) {
+	return sym.hasAttribute(typeid(U));
+}
+
+/// Ditto
+bool hasAttribute(U, T)(T sym) if(isCtMetadata!T) {
+	foreach(ref attrib; sym.attributes) {
+		if(is(typeof(attrib) == U))
+			return true;
+	}
+	return false;
+}
+
+///
+unittest {
+	struct Foo { int a; }
+	@Foo(4) struct Bar { }
+	enum sym = ctMetadata!Bar;
+	static assert(sym.hasAttribute!Foo);
+	static assert(!ctMetadata!Foo.hasAttribute!Bar);
+	Symbol rtSym = getSymbol!Bar;
+	assert(rtSym.hasAttribute!Foo);
+}
+
+/// Returns the last specified attribute that matches type T exactly.
+/// If no attribute is found matching that type, defaultValue is evaluated and returned.
+/// For convenience, if the attribute contains only a single field, defaultValue may be that field.
+/// In this case, the value of the field will be returned instead.
+U findAttribute(T, U, SymType)(SymType sym, lazy U defaultValue)
+		if((is(T == U) || (__traits(compiles, T.tupleof) && T.tupleof.length == 1 && is(U == typeof(T.tupleof[0]))))
+		&& !isCtMetadata!SymType) {
+
+	foreach(ref attrib; retro(sym.attributes)) {
+		if(attrib.type == typeid(T)) {
+			static if(is(T == U))
+				return attrib.get!T;
+			else
+				return attrib.get!T.tupleof[0];
+		}
+	}
+	return defaultValue();
+}
+
+/// ditto
+U findAttribute(T, U, SymType)(SymType sym, lazy U defaultValue) if(isCtMetadata!SymType) {
+	foreach(ref attrib; sym.attributes) {
+		static if(is(typeof(attrib) == T)) {
+			static if(is(T == U))
+				return attrib;
+			else
+				return attrib.tupleof[0];
+		}
+	}
+	return defaultValue();	
+}
+
+/// Ditto
+T findAttribute(T, SymType)(SymType sym, lazy T defaultValue = T.init) {
+	return findAttribute!(T, T, SymType)(sym, defaultValue());
+}
+
+///
+unittest {
+	struct Foo { int a; }
+	@Foo(3) struct Bar { }
+	enum ct = ctMetadata!Bar;
+	static assert(ct.findAttribute!Foo == Foo(3));
+	auto rtSym = getSymbol!Bar;
+	assert(rtSym.findAttribute!Foo(6) == 3);
+}
+
+mixin(getIsFlagsMixin!(SymbolModifier, "modifiers"));
 
 /// Stores information about a type (class, union, struct, enum, interface).
 struct TypeMetadata {
@@ -373,6 +410,76 @@ private:
 	TypeQualifier _qualifiers;
 }
 
+private struct CtTypeMetadata(T) {
+
+	@property auto symbol() @safe pure nothrow {
+		return CtSymbol!T();
+	}
+
+	alias symbol this;
+
+	@property TypeQualifier qualifiers() {
+		return getQualifiers!T;
+	}
+
+	/+@property size_t instanceSize() {
+		return __traits(classInstanceSize, T);
+	}+/
+
+	@property const(TypeInfo) type() {
+		return typeid(T);
+	}
+
+	@property TypeKind kind() {
+		return getTypeKind!T;
+	}
+
+	@property auto base() {
+		static if(is(T == class)) {
+			// BaseClassesTuple seems to break on Object?
+			static if(is(Unqual!T == Object) || BaseClassesTuple!(T).length == 0)
+				return null;
+			else
+				return ctMetadata!(BaseClassesTuple!(T)[0]);
+		} else static if(is(T == enum))
+			return ctMetadata!(OriginalType!T);
+		else
+			return null;
+	}
+
+	@property auto interfaces() {
+		static if(is(T == class) || is(T == interface))
+			return [ staticMap!(ctMetadata, InterfacesTuple!T) ];
+		else
+			return null;
+	}
+
+	@property auto parent() {
+		static if(isPrimitive!T)
+			return null;
+		else {
+			alias ParentType = aliasSelf!(__traits(parent, T))[0];
+			static if(is(typeof(isAggregateType!ParentType)) && isAggregateType!ParentType)
+				return ctMetadata!(__traits(parent, T));
+			else
+				return null;
+		}
+	}
+}
+
+///
+unittest {
+	interface Bar { }
+	class BaseFoo { static class Nested { } }
+	class Foo : BaseFoo, Bar { }
+	enum ctm = ctMetadata!Foo;
+	//static assert(ctm.name == "Foo");
+	static assert(ctm.base == ctMetadata!BaseFoo);
+//	static assert(ctm.interfaces[0].name == "Bar");
+	enum nested = ctMetadata!(BaseFoo.Nested);
+	static assert(nested.parent == ctm.base);
+}
+
 /// Provides a means of storing symbols within a type or module.
 struct SymbolContainer {
 
@@ -401,6 +508,46 @@ private:
 	ValueMetadata[] _values;
 }
 
+private struct CtSymbolContainer(T) {
+	@property auto symbol() @safe pure nothrow {
+		return CtSymbol!(T)();
+	}
+
+	@property auto values() {
+		/+foreach(m; __traits(allMembers, T)) {
+			// Fields we can handle non-public members for.
+			// Not sure yet for methods or types. Probably could types, doubt methods.
+			static if(is(T == enum)) {
+				ValueMetadata value = getEnumValue!(T, m);
+				result._values ~= value;
+			} else static if(hasField!(T, m)) {
+				ValueMetadata value = getField!(T, m);
+				result._values ~= value;
+			} else static if(is(typeof(__traits(getMember, T, m))) && is(typeof(__traits(getMember, T, m)))) {
+				alias aliasSelf!(__traits(getMember, T, m)) member;
+				//pragma(msg, __traits(identifier, __traits(getMember, T, m)));
+				static if(isType!member) {
+					result._types ~= registerLazyLoader!member;
+				} else static if(__traits(getOverloads, T, m).length > 0) {
+					populateMethods!(T, m)(result);
+				} else {
+					version(logreflect) writeln("Skipped unsupported member " ~ T.stringof ~ "." ~ m ~ ".");
+				}
+			} else {
+				version(logreflect) writeln("Skipped member ", m, " on ", T.stringof, " because it was not accessible.");
+			}
+		}+/
+		return null;
+	}
+
+	@property auto children() {		
+		auto symbols = staticMap!(stringToSymbol, __traits(allMembers, T));
+		return staticMap!(ctMetadata, symbols);
+	}
+}
+
+private enum stringToSymbol(string mem) = __traits(getMember, T, mem);
+
 /// Represents a single parameter in a method call.
 struct ParameterMetadata {
 
@@ -428,7 +575,7 @@ struct ParameterMetadata {
 
 	/// Gets the default value of this parameter.
 	/// The result is undefined if $(D, hasDefaultValue) is false.
-	@property const(Variant) defaultValue() const pure nothrow {
+	@property const(Variant) defaultValue() const {
 		return _defaultValue;
 	}
 
@@ -715,6 +862,149 @@ private:
 	}
 }
 
+private struct CtValueMetadata(Tv...) if(Tv.length == 1) {
+	alias T = Tv[0];
+	enum identifier = __traits(identifier, T);
+	static if(isField!T) {
+		enum _kind = DataKind.field;
+		alias ParentType = aliasSelf!(__traits(parent, T));
+		auto backing = CtFieldMetadata!(ParentType, identifier)();
+	} else static if(is(T == enum)) {
+		enum _kind = DataKind.constant;
+		alias ParentType = aliasSelf!(__traits(parent, T));
+		auto backing = CtConstantMetadata!(ParentType, identifier)();
+	} else {
+		static assert(0, "Unsupported backing type for CtValueMetadata.");
+	}
+
+	alias symbol this;
+
+	@property auto symbol() {
+		return backing.symbol;
+	}
+
+	@property DataKind kind() {
+		return _kind;
+	}
+
+	@property auto type() {
+		return backing.type;
+	}
+
+	static if(_kind == DataKind.field || _kind == DataKind.constant) {
+		@property auto fieldData() {
+			return backing;
+		}
+	} else static if(_kind == DataKind.property) {
+		@property auto propertyData() {
+			return backing;
+		}
+	} else static assert(0);
+
+	@property bool canGet() {
+		return backing.canGet;
+	}
+
+	// Setting values does nothing because we can only use enum constants.
+	@property bool canSet() {
+		return false;
+	}
+
+	static if(backing.canGet) {
+		@property auto getValue(InstanceType)(InstanceType instance) {
+			return backing.getValue(instance);
+		}
+	}
+
+	/+static if(backing.canSet) {
+		@property void setValue(InstanceType, ValueType)(ref InstanceType instance, ValueType value) {
+			backing.setValue(instance, value);
+		}
+	}+/
+
+	static if(backing.isStatic) {
+		@property auto getValue() {
+			return backing.getValue();
+		}
+		alias value = getValue;
+	}
+}
+
+unittest {
+	struct Foo { int a; static int b; }
+	{
+		enum meta = ctMetadata!(Foo.a);
+		static assert(meta.name == "a");
+		static assert(meta.canGet);
+		enum Foo inst = Foo(0);
+		static assert(meta.getValue(inst) == 0);
+		static assert(meta.type == ctMetadata!int);
+		static assert(meta.fieldData.offset == 0);
+		static assert(meta.fieldData.declaringType == ctMetadata!Foo);
+	} {
+		//enum meta = ctMetadata!(Foo.b);
+	}
+}
+
+private struct CtFieldMetadata(T, string mem) {
+	alias aliasSelf!(__traits(getMember, T, mem))[0] field;
+	enum isStatic = false;
+
+	@property auto symbol() {
+		return CtSymbol!(field)();
+	}
+
+	@property auto type() {
+		return CtTypeMetadata!(typeof(field))();
+	}
+
+	enum canGet = true;
+	enum canSet = true;
+
+	auto getValue(T instance) {
+		return __traits(getMember, instance, mem);
+	}
+
+	void setValue(ref T instance, typeof(field) value) {
+		__traits(getMember, instance, mem) = value;
+	}
+
+	@property size_t offset() const {
+		static if(isStatic)
+			return -1;
+		else
+			return field.offsetof;
+	}
+
+	@property auto declaringType() {
+		return ctMetadata!T;
+	}
+
+	/+@property size_t index() const {
+		return 
+	}+/
+}
+
+private struct CtConstantMetadata(T, string mem) {
+	alias aliasSelf!(__traits(getMember, T, mem)) field;
+	enum isStatic = false;
+
+	@property auto symbol() {
+		return CtSymbol!(field);
+	}
+
+	@property auto type() {
+		return CtTypeMetadata!(T)();
+	}
+
+	enum canGet = true;
+	enum canSet = false;
+
+	auto getValue() {
+		return __traits(getMember, T, mem);
+	}
+}
+
 /// Provides backing information for a field referenced by a ValueMetadata instance.
 struct FieldValueMetadata {
 
@@ -728,12 +1018,14 @@ struct FieldValueMetadata {
 	/// Note that it is possible for two fields to have the same index in the case
 	/// where a class derived from another class that implements the field.
 	/// The index is guaranteed to be unique on type however.
+	/// For static fields, this value is temporarily undefined.
 	@property size_t index() const {
 		return _index;
 	}
 
 	/// Gets the offset, in bytes, of the location of this field within the type.
 	/// The D ABI specifies that this will be the same for classes deriving from type.
+	/// For static fields, this returns -1.
 	@property size_t offset() const {
 		return _offset;
 	}
@@ -833,6 +1125,30 @@ TypeMetadata metadata(T)(T instance) {
 	}
 }
 
+/// Returns compile-time metadata for the given symbol.
+/// If specialized metadata is available (such as for a type), that is returned.
+/// Otherwise, the least specialized value possible is returned, which is simply a Symbol.
+/// This method simply aliases itself to the appropriate factory method for the symbol which is automatically invoked.
+template ctMetadata(Tv...) if(Tv.length == 1 && !isPrimitive!(Tv[0]) && (!is(typeof(isAggregateType!(Tv[0]))) || !isAggregateType!(Tv[0]))) {
+	alias T = Tv[0];
+	enum identifier = getName!T;
+	static if(is(typeof(__traits(getMember, __traits(parent, T), identifier).offsetof))) {
+		alias ParentType = aliasSelf!(__traits(parent, T));
+		enum ctMetadata = CtValueMetadata!(T)();
+	} else {
+		pragma(msg, T.stringof ~ " is a symbol.");
+		enum ctMetadata = CtSymbol!T;
+	}
+}
+
+/// ditto
+auto ctMetadata(T)() if(isPrimitive!T || isAggregateType!T) {
+	return CtTypeMetadata!T();
+}
+
+/// Indicates if the given type is used for storing compile-time metadata.
+enum isCtMetadata(T) = is(T : CtSymbol!U, U) || is(T : CtTypeMetadata!U, U) || is(T : CtValueMetadata!(U, V), U, V);
+
 /// Generates reflection data for the given class, struct, interface, primitive, union, or enum.
 /// Types that are referred to directly by the given type will be lazily loaded upon being accessed.
 TypeMetadata createMetadata(Type)() {
@@ -893,10 +1209,16 @@ private TypeMetadata getType(T)() if(!is(T == Symbol) && !is(T == TypeMetadata))
 	TypeInfo base = getBase!T;
 	size_t instanceSize = getSize!T;
 	TypeInfo[] interfaces = getInterfaces!T;
+	TypeQualifier qualifiers = getQualifiers!T;
 	// TODO: Need to make this not be Unqual.
 	// The problem is that we have a Variant passed in.
 	// So when we get inout, we don't know what the type we want is.
 	TypeConversionFunction converter = &convertTo!(Unqual!T);
+	TypeMetadata result = TypeMetadata(symbol, instanceSize, type, kind, qualifiers, symbols, base, parent, interfaces, converter);
+	return result;
+}
+
+private TypeQualifier getQualifiers(T)() {
 	TypeQualifier qualifiers;
 	static if(is(T == immutable))
 		qualifiers = TypeQualifier.immutable_;
@@ -906,9 +1228,9 @@ private TypeMetadata getType(T)() if(!is(T == Symbol) && !is(T == TypeMetadata))
 		qualifiers = TypeQualifier.const_;
 	static if(is(T == shared))
 		qualifiers |= TypeQualifier.shared_;
-	TypeMetadata result = TypeMetadata(symbol, instanceSize, type, kind, qualifiers, symbols, base, parent, interfaces, converter);
-	return result;
+	return qualifiers;
 }
+
 /// Register a loader that can get type metadata for this instance upon demand.
 /// Returns the TypeInfo for the type that was registered.
 TypeInfo registerLazyLoader(T)() {
@@ -1089,7 +1411,7 @@ Variant createInstance(ArgTypes...)(TypeMetadata metadata, ArgTypes args) {
 /// Enforces that the given metadata is a real value as opposed to the init value returned when a given member does not exist.
 /// If the member does not exist and thus $(D metadata) is invalid, a ReflectionException is thrown.
 /// The same metadata passed instance passed in is returned.
-@property auto assumed(T)(ref T metadata) {
+@property auto assumed(T)(auto ref T metadata) {
 	if(metadata == T.init)
 		throw new ReflectionException("The metadata for the value was not found.");
 	return metadata;
@@ -1156,15 +1478,42 @@ private Variant[] attributeTupleToArray(T...)(T tup) {
 	return result;
 }
 
-private string getName(Args...)() if(Args.length == 1) {
+private template getName(Args...) if(Args.length == 1) {
 	alias T = Args[0];
-	static if(is(T[0]) && isPrimitive!T && !is(T == enum)) {
-		return typeid(Unqual!T).text;
-	} else static if(__traits(compiles, Unqual!T)) {
-		return __traits(identifier, Unqual!T);
+	enum bool isPrim = isPrimitive!T;
+	enum bool isEnum = is(T == enum);
+	/+pragma(msg, "isPrim: " ~ isPrim.text ~ " - isEnum: " ~ isEnum.text);
+	static if(isPrim)
+		pragma(msg, "static if(isPrim) passes.");
+	static if(!isEnum)
+		pragma(msg, "static if(!isEnum) passes.");
+	static if(isPrim && !isEnum) {
+		pragma(msg, "static if(isPrim && !isEnum) passes.");
 	} else {
-		return __traits(identifier, T);
+		pragma(msg, "static if(isPrim && !isEnum) does NOT pass!");
 	}
+	static if(isPrimitive!T && !is(T == enum)) {
+		enum getName = (Unqual!T).stringof;
+	} +/
+	// Workaround for compiler wrong-code bug:
+	enum isNotEnumPrim = isPrim && !isEnum;
+	static if(isNotEnumPrim) {
+		enum getName = (Unqual!T).stringof;
+	} else static if(__traits(compiles, Unqual!T)) {
+		enum getName = __traits(identifier, Unqual!T);
+	} else {
+		enum getName = __traits(identifier, T);
+	}
+}
+
+unittest {
+	static assert(getName!int == "int");
+	static assert(getName!(int[]) == "int[]");
+	int a;
+	static assert(getName!a == "a");
+	struct Foo { int b; }
+	static assert(getName!Foo == "Foo");
+	static assert(getName!(Foo.b) == "b");
 }
 
 private SymbolContainer getSymbols(alias T)() {
@@ -1179,7 +1528,6 @@ private SymbolContainer getSymbols(alias T)() {
 			ValueMetadata value = getField!(T, m);
 			result._values ~= value;
 		} else static if(is(typeof(__traits(getMember, T, m))) && is(typeof(__traits(getMember, T, m)))) {
-			//version(logreflect) writeln("Processing member ", m, " on ", T.stringof, ".");
 			alias aliasSelf!(__traits(getMember, T, m)) member;
 			//pragma(msg, __traits(identifier, __traits(getMember, T, m)));
 			static if(isType!member) {
@@ -1385,18 +1733,14 @@ private TypeInfo[] getInterfaces(T)() {
 		return null;
 }
 
-private ProtectionLevel getProtection(T)() {
-	static if(isPrimitive!T) {
-		return ProtectionLevel.export_;
+private template getProtection(Tv...) if(Tv.length == 1){
+	alias T = Tv[0];
+	static if(is(typeof(isPrimitive!T)) && isPrimitive!T) {
+		enum getProtection = ProtectionLevel.export_;
 	} else {
 		enum stringVal = __traits(getProtection, T);
-		return to!ProtectionLevel(stringVal ~ "_");
+		enum getProtection = to!ProtectionLevel(stringVal ~ "_");
 	}
-}
-
-private ProtectionLevel getProtection(alias T)() {
-	enum stringVal = __traits(getProtection, T);
-	return to!ProtectionLevel(stringVal ~ "_");
 }
 
 private size_t getSize(T)() {
@@ -1638,7 +1982,7 @@ private void setPropertyValue(InstanceType)(ValueMetadata metadata, Variant inst
 	if(method == MethodMetadata.init)
 		throw new ReflectionException("Unable to find a setter that takes in a " ~ valueWrapper.type.text ~ ".");
 	InstanceType* inst = unwrapVariantPointer!InstanceType(instanceWrapper);
-	if(inst is null)
+	if(inst is null && !method.isStatic)
 		throw new ReflectionException("Unable to set a property on a struct that was not passed by reference or pointer.");
 	static if(is(InstanceType == const) || is(InstanceType == immutable))
 		throw new ReflectionException("Unable to modify const or immutable instance.");
@@ -1735,7 +2079,7 @@ private TypeInfo[] templateArgsToTypeInfo(ArgTypes...)() {
 }
 
 private __gshared StoredTypeMetadata[TypeInfo] _typeData;
-private __gshared StoredModuleMetadata[string] _moduleData;
+//private __gshared StoredModuleMetadata[string] _moduleData;
 
 private struct StoredTypeMetadata {
 	TypeMetadata function() loader;
@@ -1762,10 +2106,10 @@ private struct StoredTypeMetadata {
 	}
 }
 
-private struct StoredModuleMetadata {
+/+private struct StoredModuleMetadata {
 	ModuleMetadata delegate() loader;
 	string moduleName;
-}
+}+/
 
 // If metadata for the given type info exists, it will be lazily loaded and returned; otherwise init.
 private TypeMetadata getStoredExisting(TypeInfo typeInfo, bool skipLoad) {
@@ -1790,6 +2134,18 @@ private template isPrimitive(T) {
 	enum isPrimitive = (isBuiltinType!T || isArray!T || isPointer!T || is(T == function) || is(T == delegate));
 }
 
+private template isPrimitive(Tv...) if(Tv.length == 1 && (!is(typeof(isAggregateType!T)) || !isAggregateType!T)) {
+	enum isPrimitive = false;
+}
+
+unittest {
+	static assert(isPrimitive!int);
+	static assert(isPrimitive!(int[]));
+	struct Foo { int a ; }
+	static assert(!isPrimitive!Foo);
+	static assert(!isPrimitive!(Foo.a));
+}
+
 private template isType(T...) if(T.length == 1) {
 	enum isType = is(T[0] == class) || is(T[0] == struct) || is(T[0] == union) || is(T[0] == enum) || is(T[0] == interface);
 }
@@ -1805,7 +2161,7 @@ private template isStaticConstructor(alias T) {
 }
 
 private template isVariant(T) {
-	// TODO: Need a real way of checking.
+	// TODO: Need a real way of checking. Can use is(T == Variant!U, U...) or such.
 	enum isVariant = is(Unqual!T == Variant);
 }
 
@@ -1819,6 +2175,7 @@ template fieldIndex(T, string field) {
 }
 
 private template fieldIndexImpl(T, string field, size_t i) {
+	//pragma(msg, "Currently looking for " ~ field ~ " at " ~ i.text ~ " on " ~ T.stringof ~ ". Length is " ~ T.tupleof.length.text ~ " (first is " ~ T.tupleof[0].stringof ~ ").");
 	static if(is(T == enum)) {
 		static if(__traits(allMembers, T).length == i)
 			enum fieldIndexImpl = -1;
@@ -1826,12 +2183,20 @@ private template fieldIndexImpl(T, string field, size_t i) {
 			enum fieldIndexImpl = i;
 		else
 			enum fieldIndexImpl = fieldIndexImpl!(T, field, i + 1);
-	} else static if (T.tupleof.length == i)
+	} else static if (T.tupleof.length == i) {
+		//pragma(msg, "Is equal to tuple length.");
 		enum fieldIndexImpl = -1;
-	else static if(T.tupleof[i].stringof == field)
+	} else static if(T.tupleof[i].stringof == field) {
+		//pragma(msg, "Found");
 		enum fieldIndexImpl = i;
-	else
+	} else {
+		/+pragma(msg, "Not equal and not found. Moving on.");
+		pragma(msg, (T.tupleof.length == i).text);
+		static if(T.tupleof.length == i) {
+			pragma(msg, "Equal lengths in static if.");
+		}+/
 		enum fieldIndexImpl = fieldIndexImpl!(T, field, i + 1);
+	}
 }
 
 private string getIsFlagsMixin(T, string flagsName)() if(is(T == enum)) {
@@ -1842,8 +2207,8 @@ private string getIsFlagsMixin(T, string flagsName)() if(is(T == enum)) {
 			transformedName = transformedName[0..$-1];
 		result ~= "/// Indicates if this symbol has the $(D" ~ m[0..$-1] ~ ") modifier.\r\n";
 		result ~= "/// This method is simply a shortcut to check if the bit is set in $(D modifiers).\r\n";
-		result ~= "@property bool is" ~ transformedName ~ "() @safe const pure nothrow {";
-		result ~= "\r\n\treturn (" ~ flagsName ~ " & " ~ T.stringof ~ "." ~ m ~ ") != 0;\r\n}";
+		result ~= "@property bool is" ~ transformedName ~ "(Symbol sym) @safe pure nothrow {";
+		result ~= "\r\n\treturn (sym." ~ flagsName ~ " & " ~ T.stringof ~ "." ~ m ~ ") != 0;\r\n}";
 	}
 	return result;
 }
