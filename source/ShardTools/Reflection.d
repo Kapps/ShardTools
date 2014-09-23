@@ -548,6 +548,48 @@ private struct CtSymbolContainer(T) {
 
 private enum stringToSymbol(string mem) = __traits(getMember, T, mem);
 
+private enum SymbolKind {
+	unknown = 0,
+	type = 1,
+	method = 2,
+	variable = 4,
+}
+
+private template SymbolType(Args...) if(Args.length == 1) {
+	// Must be a separate enum, can't be directly in static if due to bug.
+	enum validInit = is(typeof(T.init));
+	enum validFunc = is(typeof(T) == function);
+	alias T = Args[0];
+	static if(isType!T)
+		enum SymbolType = SymbolKind.type;
+	else static if(validFunc)
+		enum SymbolType = SymbolKind.method;
+	else static if(validInit)
+		enum SymbolType = SymbolKind.variable;
+	else
+		enum SymbolType = SymbolKind.unknown;
+}
+
+@name("SymbolType")
+unittest {
+	struct Foo {
+		int a;
+		void b() { }
+		struct Nested {
+			int c;
+		}
+		static int d() { return 0; }
+	}
+	with(SymbolKind) {
+		static assert(SymbolType!Foo == type);
+		static assert(SymbolType!(Foo.a) == variable);
+		static assert(SymbolType!(Foo.b) == method);
+		static assert(SymbolType!(Foo.Nested) == type);
+		static assert(SymbolType!(Foo.Nested.c) == variable);
+		static assert(SymbolType!(Foo.d) == method);
+	}
+}
+
 /// Represents a single parameter in a method call.
 struct ParameterMetadata {
 
@@ -1735,7 +1777,7 @@ private TypeInfo[] getInterfaces(T)() {
 
 private template getProtection(Tv...) if(Tv.length == 1){
 	alias T = Tv[0];
-	static if(is(typeof(isPrimitive!T)) && isPrimitive!T) {
+	static if(isPrimitive!T) {
 		enum getProtection = ProtectionLevel.export_;
 	} else {
 		enum stringVal = __traits(getProtection, T);

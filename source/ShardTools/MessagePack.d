@@ -3474,7 +3474,7 @@ struct Value
     }
 
     size_t toHash() const @safe nothrow {
-        return via.integer;
+        return cast(size_t)via.integer;
     }
 
     /**
