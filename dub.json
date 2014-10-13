@@ -6,8 +6,9 @@
 	"copyright": "Copyright © 2013, Ognjen Ivkovic",
 	"license": "Boost",
 	"dependencies": {
-		"tested": { "version": "~master", "optional": false },
-		"shardmath": { "version": "~master", "optional": true }
+		"shardmath": { "version": "~master", "optional": true },
+		"msgpack-d": "~master",
+		"tested": "~master"
 	},
 	"targetType": "library"
 }

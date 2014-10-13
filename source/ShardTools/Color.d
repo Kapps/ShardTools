@@ -40,10 +40,10 @@ struct Color {
 		///		Vector = The vector, with components ranging from 0 to 1, to create the Color from, where X is Red, and W is Alpha.
 		this(Vector4f Vector) {
 			//assert(Vector.X <= 1 && Vector.Y <= 1 && Vector.Z <= 1 && Vector.W <= 1 && Vector.X >= 0 && Vector.Y >= 0 && Vector.Z >= 0 && Vector.W >= 0);
-			this.R = cast(ubyte)(Vector.X * 255);
-			this.G = cast(ubyte)(Vector.Y * 255);
-			this.B = cast(ubyte)(Vector.Z * 255);
-			this.A = cast(ubyte)(Vector.W * 255);
+			this.R = cast(ubyte)(Vector.x * 255);
+			this.G = cast(ubyte)(Vector.y * 255);
+			this.B = cast(ubyte)(Vector.z * 255);
+			this.A = cast(ubyte)(Vector.w * 255);
 		}
 		
 		/// Initializes a new instance of the Color struct.
@@ -51,9 +51,9 @@ struct Color {
 		///		Vector = The vector, with components ranging from 0 to 1, to create the Color from, where X is Red, and Z is Blue.
 		this(Vector3f Vector) {
 			//assert(Vector.X <= 1 && Vector.Y <= 1 && Vector.Z <= 1 && Vector.X >= 0 && Vector.Y >= 0 && Vector.Z >= 0);
-			this.R = cast(ubyte)(Vector.X * 255);
-			this.G = cast(ubyte)(Vector.Y * 255);
-			this.B = cast(ubyte)(Vector.Z * 255);
+			this.R = cast(ubyte)(Vector.x * 255);
+			this.G = cast(ubyte)(Vector.y * 255);
+			this.B = cast(ubyte)(Vector.z * 255);
 			this.A = 255;
 		}
 		

@@ -7,7 +7,7 @@
 module ShardTools.MemoryCache;
 private import std.functional;
 import std.datetime;
-import ShardTools.MessagePack;
+import msgpack;
 import std.array;
 import std.typecons;
 import ShardTools.AsyncAction;

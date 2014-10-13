@@ -64,6 +64,7 @@ import std.exception;
 import core.stdc.stdlib;
 import std.math;
 import ShardTools.Udas;
+import std.typecons;
 
 /// Indicates the protection level of a symbol, such as private or public.
 enum ProtectionLevel {
@@ -195,7 +196,7 @@ private struct CtSymbol(Tv...) if(Tv.length == 1) {
 	alias T = Tv[0];
 
 	@property string name() {
-		static if(is(typeof(isPrimitive!T)) && isPrimitive!T)
+		static if(isPrimitive!T)
 			return T.stringof;
 		else
 			return __traits(identifier, T);
@@ -213,10 +214,12 @@ private struct CtSymbol(Tv...) if(Tv.length == 1) {
 	}
 
 	@property auto attributes() {
-		static if((is(typeof(isPrimitive!T)) && isPrimitive!T) || __traits(getAttributes, T).length == 0)
-			return (int[]).init;
-		else
-			return [__traits(getAttributes, T)];
+		static if(isPrimitive!T || __traits(getAttributes, T).length == 0)
+			return (int[0]).init;
+		else {
+			enum attribs = __traits(getAttributes, T);
+			return [attribs];
+		}
 	}
 }
 
@@ -2172,13 +2175,17 @@ private template aliasSelf(T...) if(T.length == 1) {
 	alias T aliasSelf;
 }
 
-private template isPrimitive(T) {
-	enum isPrimitive = (isBuiltinType!T || isArray!T || isPointer!T || is(T == function) || is(T == delegate));
+private template isPrimitive(Tv...) if(Tv.length == 1) {
+	alias T = Tv[0];
+	static if(!is(typeof(isBuiltinType!T))) {
+		enum isPrimitive = false;
+	} else
+		enum isPrimitive = (isBuiltinType!T || isArray!T || isPointer!T || is(T == function) || is(T == delegate));
 }
 
-private template isPrimitive(Tv...) if(Tv.length == 1 && (!is(typeof(isAggregateType!T)) || !isAggregateType!T)) {
+/+private template isPrimitive(Tv...) if(Tv.length == 1 && (!is(typeof(isAggregateType!T)) || !isAggregateType!T)) {
 	enum isPrimitive = false;
-}
+}+/
 
 unittest {
 	static assert(isPrimitive!int);
