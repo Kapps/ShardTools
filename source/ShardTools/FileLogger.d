@@ -1,10 +1,11 @@
 /// Provides a basic Logger implementation to log to a file.
+/// This module is disabled pending rewriting to the new logging system.
 /// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
 /// Authors: Ognjen Ivkovic
 /// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.FileLogger;
 
-public import ShardTools.Logger;
+/*public import ShardTools.Logger;
 private import std.file;
 private import std.path;
 private import std.conv;
@@ -35,4 +36,4 @@ protected:
 		else
 			append(ActualName, Message ~ '\n');
 	}
-}
+}*/

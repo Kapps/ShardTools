@@ -6,9 +6,11 @@ import core.stdc.string;
 
 /// Provides a null-terminated string allocated on the scope of a maximum of N bytes.
 struct ScopeString(size_t N) {
+@nogc:
 	this(string existing) {
+		static ex = cast(immutable)(new NotSupportedException("String too long for ScopeString."));
 		if(existing.length >= N - 1)
-			throw new NotSupportedException("String too long for ScopeString.");
+			throw ex;
 		memcpy(_buffer.ptr, existing.ptr, existing.length);
 		_buffer[existing.length] = '\0';
 		_length = existing.length;

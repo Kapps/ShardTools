@@ -3,6 +3,8 @@ module ShardTools.SpinLock;
 private import core.thread;
 private import core.atomic;
 
+@nogc:
+
 /// Provides a wrapper around SlimSpinLock that implements Object.Monitor.
 final class SpinLock : Object.Monitor {
 
