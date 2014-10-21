@@ -3,6 +3,7 @@
 /// Authors: Ognjen Ivkovic
 /// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.ExceptionTools;
+import ShardTools.Udas;
 
 mixin(MakeException("InvalidOperationException", "The performed operation was considered invalid for the present state."));
 mixin(MakeException("NotSupportedException", "The operation being performed was not supported."));
@@ -33,4 +34,29 @@ string MakeException(string ExceptionName) {
 					super(ExceptionDetails, File, Line);
 				}
 		}";
+}
+
+/// Provides an implementation of enforce that reuses a single exception instance
+/// and as a result does not allocate nor leak memory.
+/// Note that because 'lazy' can not be @nogc, query is evaluated immediately rather than lazily.
+@nogc void enforceNoGC(ExType : Exception, string msg)(bool query) {
+	if(!query) {
+		static immutable ex = cast(immutable)(new ExType(msg));
+		throw ex;
+	}
+}
+
+/// Example
+@name("Enforce Tests")
+unittest {
+	void foo(bool doBar) {
+		enforceNoGC!(NotSupportedException, "Bar is not yet supported.")(!doBar);
+	}
+	foo(false); // okay
+	try {
+		foo(true);
+		assert(0);
+	} catch(NotSupportedException e) {
+		assert(e.msg == "Bar is not yet supported.");
+	}
 }

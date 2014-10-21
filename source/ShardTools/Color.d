@@ -19,150 +19,148 @@ struct Color {
 	/**
 	 * Instantiates a new instance of the Color struct.
 	 * Params:
-	 *	R = The red component for this color.
-	 *	B = The blue component for this color.
-	 *	G = The green component for this color.
-	 *	A = The alpha component for this color.
+	 *	r = The red component for this color.
+	 *	b = The blue component for this color.
+	 *	g = The green component for this color.
+	 *	a = The alpha component for this color.
 	 */
-	this(ubyte R, ubyte G, ubyte B, ubyte A = 255) {
-		this.R = R;
-		this.G = G;
-		this.B = B;
-		this.A = A;
+	this(ubyte r, ubyte g, ubyte b, ubyte a = 255) {
+		this.r = r;
+		this.g = g;
+		this.b = b;
+		this.a = a;
 	}
 
 	// While this would be nice, making EVERY SINGLE library that imports ShardTools be forced to define ShardMath is just stupid.
 	// Would be nice if only ShardMath had to define it...
 	version(ShardMath) {
 		
-		/// Initializes a new instance of the Color struct.
+		/// Creates a new color from the given vector.
 		///	Params:
-		///		Vector = The vector, with components ranging from 0 to 1, to create the Color from, where X is Red, and W is Alpha.
-		this(Vector4f Vector) {
-			//assert(Vector.X <= 1 && Vector.Y <= 1 && Vector.Z <= 1 && Vector.W <= 1 && Vector.X >= 0 && Vector.Y >= 0 && Vector.Z >= 0 && Vector.W >= 0);
-			this.R = cast(ubyte)(Vector.x * 255);
-			this.G = cast(ubyte)(Vector.y * 255);
-			this.B = cast(ubyte)(Vector.z * 255);
-			this.A = cast(ubyte)(Vector.w * 255);
+		///		vector = The vector, with components ranging from 0 to 1, to create the Color from, where X is Red, and W is Alpha.
+		this(Vector4f vector) {
+			assert(vector.x <= 1 && vector.y <= 1 && vector.z <= 1 && vector.w <= 1 && vector.x >= 0 && vector.y >= 0 && vector.z >= 0 && vector.w >= 0);
+			this.r = cast(ubyte)(vector.x * 255);
+			this.g = cast(ubyte)(vector.y * 255);
+			this.b = cast(ubyte)(vector.z * 255);
+			this.a = cast(ubyte)(vector.w * 255);
 		}
 		
-		/// Initializes a new instance of the Color struct.
-		///	Params:
-		///		Vector = The vector, with components ranging from 0 to 1, to create the Color from, where X is Red, and Z is Blue.
-		this(Vector3f Vector) {
-			//assert(Vector.X <= 1 && Vector.Y <= 1 && Vector.Z <= 1 && Vector.X >= 0 && Vector.Y >= 0 && Vector.Z >= 0);
-			this.R = cast(ubyte)(Vector.x * 255);
-			this.G = cast(ubyte)(Vector.y * 255);
-			this.B = cast(ubyte)(Vector.z * 255);
-			this.A = 255;
+		/// Ditto
+		this(Vector3f vector) {
+			assert(vector.x <= 1 && vector.y <= 1 && vector.z <= 1 && vector.x >= 0 && vector.y >= 0 && vector.z >= 0);
+			this.r = cast(ubyte)(vector.x * 255);
+			this.g = cast(ubyte)(vector.y * 255);
+			this.b = cast(ubyte)(vector.z * 255);
+			this.a = 255;
 		}
 		
-		/// Returns a Vector2 representation of this object, with components ranging from zero to one, where X is Red and W is Alpha.
-		Vector3f ToVector3() const {
-			return Vector3f(R / 255f, G / 255f, B / 255f);
+		/// Returns a Vector representation of this object, with components ranging from zero to one, where X is Red and W is Alpha.
+		Vector3f toVector3() const {
+			return Vector3f(r / 255f, g / 255f, b / 255f);
 		}
 		
-		/// Returns a Vector4 representation of this object, with components ranging from zero to one, where X is Red and W is Alpha.
-		Vector4f ToVector4() const {
-			return Vector4f(R / 255f, G / 255f, B / 255F, A / 255f);
+		/// Ditto
+		Vector4f toVector4() const {
+			return Vector4f(r / 255f, g / 255f, b / 255F, a / 255f);
 		}
 		
 	}
 	
 	/// Returns a pre-defined Color with this name.
-	@property static Color Aqua() {
+	@property static Color aqua() {
 		return Color(0, 255, 255);
 	}
 	
-	/// Returns a pre-defined Color with this name.
-	@property static Color Fuschia() {
+	/// Ditto
+	@property static Color fuschia() {
 		return Color(0, 255, 0, 255);
 	}
 	
-	/// Returns a pre-defined Color with this name.
-	@property static Color Black() {
+	/// Ditto
+	@property static Color black() {
 		return Color(0, 0, 0, 255);
 	}
 	
-	/// Returns a pre-defined Color with this name.
-	@property static Color Blue() {
+	/// Ditto
+	@property static Color blue() {
 		return Color(0, 0, 255, 255);
 	}
 	
-	/// Returns a pre-defined Color with this name.
-	@property static Color Red() {
+	/// Ditto
+	@property static Color red() {
 		return Color(255, 0, 0, 255);
 	}
-	
-	/// Returns a pre-defined Color with this name.
-	/// Note that the color returned by this does not have a Green component value
-	///	of 255, but of 128 instead. Lime has a Green component of 255.	
-	@property static Color Green() {
-		return Color(0, 128, 0);
-	}
-	
-	/// Returns a pre-defined Color with this name.
-	@property static Color Gray() {
+		
+	/// Ditto
+	@property static Color gray() {
 		return Color(128, 128, 128);
 	}
 	
-	/// Returns a pre-defined Color with this name.
-	@property static Color TransparentBlack() {
+	/// Ditto
+	@property static Color transparentBlack() {
 		return Color(0, 0, 0, 0);
 	}
 	
-	/// Returns a pre-defined Color with this name.	
-	@property static Color Lime() {
+	/// Ditto
+	@property static Color lime() {
 		return Color(0, 255, 0);
 	}
 	
-	/// Returns a pre-defined Color with this name.	
-	@property static Color Maroon() {
+	/// Ditto
+	@property static Color maroon() {
 		return Color(128, 0, 0);
 	}
 	
-	/// Returns a pre-defined Color with this name.
-	@property static Color Navy() {
+	/// Ditto
+	@property static Color navy() {
 		return Color(0, 0, 128);
 	}
 	
-	/// Returns a pre-defined Color with this name.	
-	@property static Color Olive() {
+	/// Ditto
+	@property static Color olive() {
 		return Color(128, 128, 0);
 	}
 	
-	/// Returns a pre-defined Color with this name.	
-	@property static Color Purple() {
+	/// Ditto
+	@property static Color purple() {
 		return Color(128, 0, 128);
 	}
 	
-	/// Returns a pre-defined Color with this name.	
-	@property static Color Silver() {
+	/// Ditto
+	@property static Color silver() {
 		return Color(192, 192, 192);
 	}
 	
-	/// Returns a pre-defined Color with this name.	
-	@property static Color Teal() {
+	/// Ditto
+	@property static Color teal() {
 		return Color(0, 128, 128);
 	}
 	
-	/// Returns a pre-defined Color with this name.	
-	@property static Color White() {
+	/// Ditto
+	@property static Color white() {
 		return Color(255, 255, 255);
 	}
 	
-	/// Returns a pre-defined Color with this name.	
-	@property static Color Yellow() {
+	/// Ditto
+	@property static Color yellow() {
 		return Color(255, 255, 0);
+	}
+
+	/// Returns a pre-defined Color with this name.
+	/// Note that the color returned by this does not have a Green component value
+	///	of 255, but of 128 instead. Lime has a Green component of 255.	
+	@property static Color green() {
+		return Color(0, 128, 0);
 	}
 	
 align(1):		
 	/// The Blue component for this color.
-	ubyte R;
+	ubyte r;
 	/// The Green component for this color.
-	ubyte G;					
+	ubyte g;					
 	/// The Red component for this color.
-	ubyte B;
+	ubyte b;
 	/// The Alpha component for this color.
-	ubyte A;
+	ubyte a;
 }
