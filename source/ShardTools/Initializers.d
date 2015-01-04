@@ -6,6 +6,8 @@ module ShardTools.Initializers;
 import core.stdc.stdlib;
 import std.conv;
 import ShardTools.Udas;
+import std.traits;
+import core.stdc.string;
 
 /// Initializes the given specified objects to the result of a call to new.
 void constructNew(T...)(ref T values) {
@@ -36,8 +38,33 @@ unittest {
 	mallocFree(inst);
 }
 
-/// Frees a class instance created by $(D mallocNew).
+/// Returns the given array created with malloc rather than the GC.
+T[] mallocDup(T)(T[] arr) if(!isArray!T) {
+	void* buff = malloc(T.sizeof * arr.length);
+	T[] res = (cast(T*)buff)[0..arr.length];
+	memcpy(res.ptr, arr.ptr, T.sizeof * arr.length);
+	return res;
+}
+
+/// Example
+@name("Malloc Array Tests")
+unittest {
+	int[] elements = [1, 2, 3, 4];
+	auto duped = elements.mallocDup();
+	scope(exit)
+		mallocFree(duped);
+	assert(duped == elements);
+	assert(duped.ptr != elements.ptr);
+}
+
+
+/// Frees an object or array created by $(D mallocNew) or $(D mallocDup).
 void mallocFree(T)(T instance) if(is(T == class)) {
 	auto mem = cast(void*)instance;
 	free(mem);
+}
+
+/// Ditto
+void mallocFree(T)(T[] inst) if(!isArray!T) {
+	free(inst.ptr);
 }

@@ -3,8 +3,8 @@ module ShardTools.Stack;
 private import core.memory;
 private import core.atomic;
 private import std.exception;
-private import std.c.stdlib;
-private import std.c.string;
+private import core.stdc.stdlib;
+private import core.stdc.string;
 
 import ShardTools.ICollection;
 

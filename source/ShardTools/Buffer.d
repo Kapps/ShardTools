@@ -9,8 +9,8 @@ private import std.array;
 private import std.exception;
 private import core.memory;
 private import std.math;
-private import std.c.stdlib;
-private import std.c.string;
+private import core.stdc.stdlib;
+private import core.stdc.string;
 import ShardTools.Udas;
 
 

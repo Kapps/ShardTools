@@ -54,13 +54,12 @@ T getCommandLineOptions(T)(ref string[] args, CommandLineFlags flags = CommandLi
 			value.setValue(instance, convertedVal);
 		}
 		size_t oldLength = args.length;
-		getopt(args, config.caseInsensitive, config.passThrough, name, &setValue);
+		getopt(args, config.caseInsensitive, config.bundling, config.passThrough, name, &setValue);
 		if(args.length == oldLength && value.findAttribute!Required(false)) {
-			handleError(flags, "The required parameter " 
+			handleError(flags, "The required parameter "
 				~ value.findAttribute!DisplayName(value.name) ~ " was missing.");
 		}
 	}
-
 	StoredCommand[] commands;
 	bool commandInvoked = false;
 	foreach(method; getCommands(metadata)) {
@@ -72,9 +71,9 @@ T getCommandLineOptions(T)(ref string[] args, CommandLineFlags flags = CommandLi
 			commands ~= StoredCommand(method, null);
 		}
 		if(method.parameters.length > 0)
-			getopt(args, config.caseInsensitive, config.passThrough, name, &storeCommand);
+			getopt(args, config.caseInsensitive, config.passThrough, config.bundling, name, &storeCommand);
 		else
-			getopt(args, config.caseInsensitive, config.passThrough, name, &storeCommandWithoutValue);
+			getopt(args, config.caseInsensitive, config.passThrough, config.bundling, name, &storeCommandWithoutValue);
 	}
 	if(commands.length > 1) {
 		string[] nonMultiNames = commands.map!(c=>c.metadata)
@@ -94,7 +93,7 @@ T getCommandLineOptions(T)(ref string[] args, CommandLineFlags flags = CommandLi
 		if(defaultMethods.length == 1)
 			commands = [StoredCommand(defaultMethods[0], null)];
 		else {
-			handleError(flags, 
+			handleError(flags,
 				"You must specify a command.",
 			    "Valid commands are:",
 			    "\t" ~ getCommandText(metadata).replace("\n", "\n\t")

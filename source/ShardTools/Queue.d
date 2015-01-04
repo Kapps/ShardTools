@@ -5,7 +5,7 @@
 module ShardTools.Queue;
 private import ShardTools.SpinLock;
 private import core.memory;
-import std.c.stdlib;
+import core.stdc.stdlib;
 
 /// Provides an optimized implementation of a FIFO queue, optionally including thread-safety using a SpinLock.
 final class Queue(T, bool ThreadSafe = false) {

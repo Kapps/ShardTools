@@ -719,7 +719,7 @@ struct MethodMetadata {
 		static if(isPointer!InstanceType) {
 			void* contextPtr = cast(void*)*instancePtr;
 		} else static if(is(InstanceType == struct)) {
-			static if(isVariant!InstanceType) {
+			static if(is(InstanceType == VariantN!N, size_t N)) {
 				enum storeIndex = fieldIndex!(InstanceType, "store");
 				void* contextPtr;
 				ClassInfo ci = cast(ClassInfo)instancePtr.type;
@@ -734,12 +734,11 @@ struct MethodMetadata {
 					Interface* inter = **cast(Interface***)interPtr;
 					contextPtr = interPtr - inter.offset;
 				} else {
-					if(instancePtr.type.tsize > instancePtr.size) {
+					auto contentsPtr = &instancePtr.tupleof[storeIndex];
+					if(instancePtr.type.tsize > N) {
 						// For a large struct, Variant will store a pointer inside it's array.
-						auto contentsPtr = &instancePtr.tupleof[storeIndex];
 						contextPtr = *(cast(void**)contentsPtr);
 					} else {
-						auto contentsPtr = &instancePtr.tupleof[storeIndex];
 						contextPtr = cast(void*)contentsPtr;
 					}
 				}
@@ -1228,13 +1227,13 @@ TypeMetadata createMetadata(Type)() {
 	}
 }
 
-private TypeMetadata getType(T)() if(is(T == Symbol) || is(T == TypeMetadata)) {
+/+private TypeMetadata getType(T)() if(is(T == Symbol) || is(T == TypeMetadata)) {
 	// Can't generate metadata for types from this module.
 	pragma(msg, "Warning: Skipping metadata for ", T.stringof, " due to likely linker errors.");
 	return TypeMetadata.init;
-}
+}+/
 
-private TypeMetadata getType(T)() if(!is(T == Symbol) && !is(T == TypeMetadata)) {
+private TypeMetadata getType(T)() /+if(!is(T == Symbol) && !is(T == TypeMetadata))+/ {
 	Symbol symbol = getSymbol!T;
 	static if(isPrimitive!T && !is(T == enum)) {
 		SymbolContainer symbols = SymbolContainer.init;
@@ -1401,8 +1400,10 @@ void setValue(T, InstanceType, ValueType)(T metadata, string valueName, Instance
 /// Bugs:
 /// 	At the moment creating an instance of a struct with arguments is not supported.
 Variant createInstance(ArgTypes...)(TypeMetadata metadata, ArgTypes args) {
+	if(metadata == TypeMetadata.init)
+		throw new InvalidArgumentException("Invalid metadata passed to createInstance.");
 	if(metadata.kind != TypeKind.struct_ && metadata.kind != TypeKind.class_)
-		throw new NotSupportedException("Only structs and classes may be instantiated through createInstance.");
+		throw new NotSupportedException("Only structs and classes may be instantiated through createInstance, not " ~ metadata.kind.text ~ ".");
 	TypeInfo[] argTypes = templateArgsToTypeInfo!(ArgTypes);
 	MethodMetadata method = findMethod(metadata, "__ctor", argTypes);
 	if(method == MethodMetadata.init && ArgTypes.length > 0)
@@ -1504,6 +1505,7 @@ private Symbol getSymbol(Args...)() if(Args.length == 1) {
 }
 
 private Variant[] getAttributes(Args...)() if(Args.length == 1) {
+	// TODO: Static array?
 	alias T = Args[0];
 	static if(!__traits(compiles, __traits(getAttributes, T))) {
 		version(logreflect) writeln("Calling getAttributes on " ~ T.stringof ~ " does not compile. Returning null.");
@@ -1515,6 +1517,7 @@ private Variant[] getAttributes(Args...)() if(Args.length == 1) {
 }
 
 private Variant[] attributeTupleToArray(T...)(T tup) {
+	// TODO: Static array?
 	Variant[] result = new Variant[tup.length];
 	foreach(index, attrib; tup) {
 		registerLazyLoader!(typeof(attrib));
@@ -2413,7 +2416,7 @@ version(unittest) {
 	}
 
 	// Full functionality tests.
-
+	import std.stdio;
 	// Basic struct tester:
 	@name("Struct Metadata")
 	unittest {
@@ -2438,12 +2441,10 @@ version(unittest) {
 		ValueMetadata prop = metadata.findValue("stringValProperty");
 		assert(prop.getValue(instance) == "def");
 		assert(prop.propertyData.getter.name == "stringValProperty");
-
 		auto floatTesterMeta = createMetadata!ReflectionFloatStructTester;
 		auto inst2 = floatTesterMeta.createInstance.get!ReflectionFloatStructTester;
 		assert(inst2.a == 0);
 		assert(isNaN(inst2.b));
-
 		// TODO: Support createInstance with args for structs.
 		/+auto attribTesterMeta = createMetadata!ReflectionTestAttribute;
 		auto inst4 = attribTesterMeta.createInstance(6).get!ReflectionTestAttribute;
@@ -2493,7 +2494,6 @@ version(unittest) {
 		MethodMetadata staticMethod = metadata.findMethod("staticMethod");
 		assert(staticMethod.name == "staticMethod");
 		assert(staticMethod.invoke(null) == 3);
-
 
 		// Test derived classes:
 		auto derivedData = createMetadata!ReflectionDerivedClass;

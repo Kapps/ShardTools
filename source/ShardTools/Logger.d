@@ -1,4 +1,4 @@
-/// Provides basic, global, logging capabilities without requiring allocations.
+/// Provides basic, global, logging capabilities without requiring any GC allocations.
 /// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
 /// Authors: Ognjen Ivkovic
 /// Copyright: © 2013 Ognjen Ivkovic
@@ -14,11 +14,13 @@ unittest {
 	class TestLogger : Logger {
 		int started, ended;
 		size_t totalLength;
+		LogLevel lastLevel;
 		@nogc void beginMessage(ref LogHeader header) { started++; }
-		@nogc void logPart(ref LogHeader header, in char[] part) { totalLength += part.length; }
+		@nogc void logPart(ref LogHeader header, in char[] part) { totalLength += part.length; lastLevel = header.level; }
 		@nogc void endMessage(ref LogHeader header) { ended++; }
 	}
-	auto tl = new TestLogger();
+	ubyte[__traits(classInstanceSize, TestLogger)] logbuff;
+	auto tl = logbuff.emplace!TestLogger;
 	registerLogger(tl);
 	log("Test message.");
 	assert(tl.started == tl.ended);
@@ -27,6 +29,15 @@ unittest {
 	tl.totalLength = 0;
 	logf("This is test message #%s.", tl.ended + 1);
 	assert(tl.totalLength == "This is test message #2.".length);
+	assert(tl.lastLevel == LogLevel.info);
+	tl.totalLength = 0;
+	logtf("This is test message %s.", tl.ended + 1);
+	assert(tl.totalLength == "This is test message 3.".length);
+	assert(tl.lastLevel == LogLevel.trace);
+	tl.totalLength = 0;
+	logt("Another trace message.");
+	assert(tl.totalLength == "Another trace message.".length);
+	assert(tl.lastLevel == LogLevel.trace);
 }
 
 @nogc:
@@ -64,6 +75,9 @@ struct LogHeader {
 }
 
 /// Provides the base interface for a GC-free Logger.
+/// Note that Loggers may be invoked from a separate thread than they were registered in.
+/// Also note that multiple Loggers in the future log in parallel with other loggers,
+/// however an individual logger will never log multiple messages concurrently.
 interface Logger {
 	/// Called to indicate that a new message is being logged.
 	/// It is guaranteed that an endMessage occurs between these calls.
@@ -88,12 +102,19 @@ void registerLogger(Logger logger) {
 	_numLoggers++;
 }
 
+// TODO: Consider making logging done in a separate thread so that it's non-blocking.
+
 /// Logs a message with the last letter corresponding to the log level (for example, d for debug).
 /// To format values passed in, use the overloads that end with an 'f'.
 /// The default 'log' method does not support formatting and logs an info message.
 void log(LogLevel level = LogLevel.info)(string msg, string file = __FILE__, int line = __LINE__, string func = __FUNCTION__) {
+	// TODO: Lock per-logger rather than using a global lock.
+	_globalLock.lock();
+	scope(exit)
+		_globalLock.unlock();
+
+	auto header = LogHeader(level, currTimeNoGC(), file, line, func);
 	foreach(logger; _loggers[0 .. _numLoggers]) {
-		auto header = LogHeader(level, currTimeNoGC(), file, line, func);
 		logger.beginMessage(header);
 		logger.logPart(header, msg);
 		logger.endMessage(header);
@@ -102,14 +123,72 @@ void log(LogLevel level = LogLevel.info)(string msg, string file = __FILE__, int
 
 /// Ditto
 void logf(LogLevel level = LogLevel.info, string file = __FILE__, int line = __LINE__, string func = __FUNCTION__, T...)(string msg, T args) {
-	foreach(logger; _loggers[0 .. _numLoggers]) {
-		auto header = LogHeader(level, currTimeNoGC(), file, line, func);
+	// TODO: Maybe change locking in the same way as log. Less beneficial here though.
+	_globalLock.lock();
+	scope(exit)
+		_globalLock.unlock();
+
+	// Done in multiple steps so we only need to format once.
+	auto header = LogHeader(level, currTimeNoGC(), file, line, func);
+	foreach(logger; _loggers[0 .. _numLoggers])
 		logger.beginMessage(header);
-		scope tmpdg = delegate(const(char[]) dat) {
+	scope tmpdg = delegate(const(char[]) dat) {
+		foreach(logger; _loggers[0 .. _numLoggers])
 			logger.logPart(header, dat);
-		};
-		tmpdg.formattedWriteNoGC(msg, args);
+	};
+	tmpdg.formattedWriteNoGC(msg, args);
+	foreach(logger; _loggers[0 .. _numLoggers])
 		logger.endMessage(header);
+}
+
+/// Ditto
+void logt(string msg, string file = __FILE__, int line = __LINE__, string func = __FUNCTION__) {
+	log!(LogLevel.trace)(msg, file, line, func);
+}
+
+/// Ditto
+void logtf(string file = __FILE__, int line = __LINE__, string func = __FUNCTION__, T...)(string msg, T args) {
+	logf!(LogLevel.trace, file, line, func, T)(msg, args);
+}
+
+/// Ditto
+void logd(string msg, string file = __FILE__, int line = __LINE__, string func = __FUNCTION__) {
+	log!(LogLevel.debug_)(msg, file, line, func);
+}
+
+/// Ditto
+void logdf(string file = __FILE__, int line = __LINE__, string func = __FUNCTION__, T...)(string msg, T args) {
+	logf!(LogLevel.debug_, file, line, func, T)(msg, args);
+}
+
+/// Ditto
+void logw(string msg, string file = __FILE__, int line = __LINE__, string func = __FUNCTION__) {
+	log!(LogLevel.warn)(msg, file, line, func);
+}
+
+/// Ditto
+void logwf(string file = __FILE__, int line = __LINE__, string func = __FUNCTION__, T...)(string msg, T args) {
+	logf!(LogLevel.warn, file, line, func, T)(msg, args);
+}
+
+/// Ditto
+void loge(string msg, string file = __FILE__, int line = __LINE__, string func = __FUNCTION__) {
+	log!(LogLevel.error)(msg, file, line, func);
+}
+
+/// Ditto
+void logef(string file = __FILE__, int line = __LINE__, string func = __FUNCTION__, T...)(string msg, T args) {
+	logf!(LogLevel.error, file, line, func, T)(msg, args);
+}
+
+/// Attempts to log a message, returning whether successful or not.
+/// An attempt to log is successful if no underlying logger throws an Exception during the attempt.
+bool tryLogf(LogLevel level = LogLevel.info, string file = __FILE__, int line = __LINE__, string func = __FUNCTION__, T...)(string msg, T args) {
+	try {
+		logf!(level, file, line, func, T)(msg, args);
+		return true;
+	} catch(Exception ex) {
+		return false;
 	}
 }
 
@@ -147,7 +226,9 @@ private @nogc SysTime currTimeNoGC() {
 	return func();
 }
 
+
 // TODO: Don't use a static array, instead use a dynamic array with malloc.
+// Once std.container.array is fixed to be @nogc we can use that.
 private enum MAX_LOGGERS = 32;
 private Logger[MAX_LOGGERS] _loggers;
 private size_t _numLoggers = 0;

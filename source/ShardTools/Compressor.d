@@ -6,8 +6,8 @@
 module ShardTools.Compressor;
 import etc.c.zlib;
 import std.zlib;
-import std.c.stdlib;
-import std.c.string;
+import core.stdc.stdlib;
+import core.stdc.string;
 
 /// A class used to compress data in various formats.
 public class Compressor  {

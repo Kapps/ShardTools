@@ -7,8 +7,7 @@
 	"license": "Boost",
 	"dependencies": {
 		"shardmath": { "version": "~master", "optional": true },
-		"msgpack-d": "~master",
-		"tested": "~master"
+		"msgpack-d": "~master"
 	},
 	"targetType": "library"
 }

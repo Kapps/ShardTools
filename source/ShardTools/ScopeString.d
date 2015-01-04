@@ -35,3 +35,9 @@ struct ScopeString(size_t N) {
 	private size_t _length;
 	private char[N] _buffer;
 }
+
+/// Returns a scope string for the given data with a maximum length of N.
+/// The default value of 248 bytes is chosen to be 256 bytes after including the extra length field.
+auto scoped(size_t N = 248)(string str) {
+	return ScopeString!(N)(str);
+}

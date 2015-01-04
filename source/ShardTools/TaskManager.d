@@ -20,7 +20,7 @@ private import ShardTools.SpinLock;
 private import core.thread;
 private import ShardTools.ConcurrentStack;
 private import std.algorithm;
-import std.c.stdlib;
+import core.stdc.stdlib;
 import ShardTools.ExceptionTools;
 private import std.parallelism;
 
@@ -29,7 +29,7 @@ mixin(MakeException("PoolDestroyedException", "Unable to place new tasks into a 
 // TODO: Consider renaming to TaskQueue; seems nicer.
 // Also, TaskManager could be interpreted as something similar to Windows' Task Manager.
 // TODO: Actually implement this.
-
+/+ Not only @disabled but actually commented out because it causes linker errors with Mutex...
 /// Provides a collection of threads which can execute tasks (AsyncActions) across multiple threads.
 /// The number of threads used can be dynamically altered, and threads will be created or destroyed automatically as required.
 /// Unlike the TaskPool, the TaskManager has the capability to prioritize certain tasks, and the capability to pause or resume tasks using Fibers.
@@ -294,3 +294,4 @@ T await(T = Untyped)(AsyncAction Action, ResumeStyle ResumeType, size_t StackSiz
  // TODO: Could probably manually implement something similar to Fiber here, to change call stack to one from this.
  // But then, the thread would be acting as a TaskThread during this time.
  }+/
+ +/
