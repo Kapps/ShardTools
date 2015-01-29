@@ -17,7 +17,13 @@ import ShardTools.Udas;
 //@nogc:
 
 /// Represents a manual memory managed HashTable, capable of using custom comparison functions.
-struct HashTable(Key, Value, alias comparer = (a, b) => a == b) {
+/// This struct is ref-counted for convenience.
+/// Bugs:
+/// 	Using `Key.init` as a key is not yet supported. This is particularly harmful when using integer types as keys.
+alias HashTable(Key, Value) = RefCounted!(HashTableImpl!(Key, Value), RefCountedAutoInitialize.yes);
+
+/// Ditto
+struct HashTableImpl(Key, Value, alias comparer = (a, b) => a == b) {
 
 	/// Creates a new HashTable with the given load boundaries.
 	/// The load boundaries indicate at what $(D loadFactor) the HashTable is resized.
@@ -324,6 +330,8 @@ private /+@nogc+/:
 	}
 
 	static void freeData(ref Entry[] entries) {
+		if(entries is null)
+			return;
 		foreach(root; entries) {
 			if(root.key is Key.init)
 				continue;

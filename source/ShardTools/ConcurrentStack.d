@@ -1,4 +1,5 @@
 ﻿/// Provides a concurrent lock-free stack.
+/// $(RED Warning): The implementation of this module is currently very poor.
 /// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
 /// Authors: Ognjen Ivkovic
 /// Copyright: © 2013 Ognjen Ivkovic

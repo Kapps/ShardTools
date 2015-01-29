@@ -1,4 +1,5 @@
 ﻿/// Provides a base class for all asynchronous operations to implement.
+/// The future of this model is not yet decided, and it may be phased out.
 /// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
 /// Authors: Ognjen Ivkovic
 /// Copyright: © 2013 Ognjen Ivkovic

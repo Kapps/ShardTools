@@ -1,0 +1,8 @@
+{
+	"fileVersion": 1,
+	"versions": {
+		"msgpack-d": "~master",
+		"tested": "~master",
+		"shardmath": "~master"
+	}
+}
