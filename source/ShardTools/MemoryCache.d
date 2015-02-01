@@ -5,6 +5,7 @@
 /// Authors: Ognjen Ivkovic
 /// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.MemoryCache;
+/+
 private import std.functional;
 import std.datetime;
 import msgpack;
@@ -242,4 +243,4 @@ private:
 		});
 		return Task;
 	}
-}
+}+/
