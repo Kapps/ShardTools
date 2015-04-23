@@ -26,16 +26,21 @@ final class BufferPool  {
 //		 Then, when it sees something has too many or too little, it pops some buffers, splits and combines them, and pushes them back in.
 //       A thread polling is a bad idea, it should actually be every X calls perform a check, and then maybe dispatch a task to clean it up.
 
-// TODO: Ideally this class shouldn't be needed at all. Instead, usinga Buffer should handle this internally.
+// TODO: Ideally this class shouldn't be needed at all. Instead, using a Buffer should handle this internally.
 // That way we don't have to manually release memory.
+// Consider making Buffer be ref-counted? Or make it GC and free the memory in a destructor?
+// If the latter, decide whether to make it use GC backed memory; more to track, but knows how much it uses for when to free.
 
-// TODO: Rewrite the acquire / release methods to not be terrible.
-// It rather defeats the purpose at the moment since ConcurrentStack allocates.
+// TODO: Rewrite the acquire / release methods to not be completely terrible.
+// It rather defeats the purpose of using a Buffer when at the moment ConcurrentStack allocates on every release...
 // Instead, allocate an extra header along with the memory allocated for the buffer when needed.
 // Essentially, allocate __traits(classInstanceSize, Buffer) + BufferHeader.sizeof + RoundedCapacity,
 // then pass in from RoundedCapacity to end for array, emplace buffer at __traits spot, and initialize
 // struct containing next pointer at BufferHeader.
 // Now we have just one allocation if empty (unless we go over Capacity), and to get when not empty none.
+// Resizing could actually be done automatically by making it so if you go over Capacity, the buffer changes
+// and frees the current buffer. Then no actual allocations in most situations, just pooled memory.
+// Need to test just how much of an increase this is though considering the GC should pool memory as well.
 
 public:
 
