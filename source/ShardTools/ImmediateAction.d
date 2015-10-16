@@ -3,6 +3,8 @@
 /// Authors: Ognjen Ivkovic
 /// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.ImmediateAction;
+
+version(none) {
 import ShardTools.AsyncAction;
 import ShardTools.Untyped;
 
@@ -43,3 +45,4 @@ class ImmediateAction : AsyncAction {
 	}
 }
 
+}

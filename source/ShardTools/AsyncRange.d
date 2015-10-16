@@ -3,6 +3,8 @@
 /// Authors: Ognjen Ivkovic
 /// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.AsyncRange;
+
+/+
 import std.exception;
 import ShardTools.SignaledTask;
 import std.parallelism;
@@ -151,4 +153,4 @@ unittest {
 	range.Start();
 	range.WaitForCompletion(10.seconds);
 	assert(elements == copy);
-}
+}+/

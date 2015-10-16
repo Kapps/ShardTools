@@ -4,6 +4,7 @@
 /// Authors: Ognjen Ivkovic
 /// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.AsyncAction;
+version(none) {
 private import core.atomic;
 import ShardTools.Untyped;
 private import std.functional;
@@ -311,4 +312,5 @@ private class ActionManager {
 	
 	private static __gshared RedBlackTree!AsyncAction Actions;
 	
+}
 }

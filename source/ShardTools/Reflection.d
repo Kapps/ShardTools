@@ -248,6 +248,7 @@ bool hasAttribute(U, T)(T sym) if(isCtMetadata!T) {
 }
 
 ///
+@name("CtSymbol Tests")
 unittest {
 	struct Foo { int a; }
 	@Foo(4) struct Bar { }
@@ -296,6 +297,7 @@ T findAttribute(T, SymType)(SymType sym, lazy T defaultValue = T.init) {
 }
 
 ///
+@name("Ct Attribute Tests")
 unittest {
 	struct Foo { int a; }
 	@Foo(3) struct Bar { }
@@ -471,6 +473,7 @@ private struct CtTypeMetadata(T) {
 }
 
 ///
+@name("CtMetaData Tests")
 unittest {
 	interface Bar { }
 	class BaseFoo { static class Nested { } }
@@ -974,6 +977,7 @@ private struct CtValueMetadata(Tv...) if(Tv.length == 1) {
 	}
 }
 
+@name("CtValueMetadata Tests")
 unittest {
 	struct Foo { int a; static int b; }
 	{
@@ -1554,6 +1558,7 @@ private template getName(Args...) if(Args.length == 1) {
 	}
 }
 
+@name("GetName Tests")
 unittest {
 	static assert(getName!int == "int");
 	static assert(getName!(int[]) == "int[]");
@@ -1957,26 +1962,26 @@ private ImplicitConversionType getImplicitConversionType(in TypeInfo from, in Ty
 	// Note that TypeInfo_Shared, TypeInfo_Inout, and TypeInfo_Invariant, derive from TypeInfo_Const.
 	if(cast(TypeInfo_Shared)to || cast(TypeInfo_Shared)from)
 		return ImplicitConversionType.none_;
-	auto totic = cast(TypeInfo_Const)to;
+	auto toConst = cast(TypeInfo_Const)to;
 	// If to is non-const, nothing can implicitly const convert to it. Saves a bit of effort below.
-	if(totic is null)
+	if(toConst is null)
 		return ImplicitConversionType.none_;
-	auto fromtic = cast(TypeInfo_Const)from;
+	auto fromConst = cast(TypeInfo_Const)from;
 	// Already handled shared and inout above, so const yet not immutable means just const.
-	if(cast(TypeInfo_Inout)fromtic) {
-		if(cast(TypeInfo_Invariant)totic is null && totic && fromtic.next == totic.next)
+	if(cast(TypeInfo_Inout)fromConst) {
+		if(cast(TypeInfo_Invariant)toConst is null && toConst && fromConst.base == toConst.base)
 			return ImplicitConversionType.inout_;
 		// Otherwise is from is inout and to isn't simply const then nothing can convert to it.
 		return ImplicitConversionType.none_;
 	}
 	// Now to is inout, can convert from in any remaining situation (aka not shared).
-	if(cast(TypeInfo_Inout)totic && (totic.next == from || (fromtic && totic.next == fromtic.next)))
+	if(cast(TypeInfo_Inout)toConst && (toConst.base == from || (fromConst && toConst.base == fromConst.base)))
 		return ImplicitConversionType.inout_;
 	// Otherwise if neither are inout, from can convert to to iff from is non-const and to is const.
-	if(fromtic is null && totic && cast(TypeInfo_Invariant)totic is null && from == totic.next)
+	if(fromConst is null && toConst && cast(TypeInfo_Invariant)toConst is null && from == toConst.base)
 		return ImplicitConversionType.const_;
 	// If from is non-const or is inout we can implicitly convert it to const.
-	if(totic && (totic.next == to || (fromtic && fromtic.next == totic.next)))
+	if(toConst && (toConst.base == to || (fromConst && fromConst.base == toConst.base)))
 		return ImplicitConversionType.const_;
 	return ImplicitConversionType.none_;
 } 
@@ -1992,6 +1997,9 @@ unittest {
 	assert(getImplicitConversionType(typeid(inout int), typeid(const int)) == ImplicitConversionType.inout_);
 	assert(getImplicitConversionType(typeid(inout int), typeid(immutable int)) == ImplicitConversionType.none_);
 	assert(getImplicitConversionType(typeid(int), typeid(string)) == ImplicitConversionType.none_);
+	assert(getImplicitConversionType(typeid(shared int), typeid(shared int)) == ImplicitConversionType.exact_);
+	assert(getImplicitConversionType(typeid(int), typeid(shared int)) == ImplicitConversionType.none_);
+	assert(getImplicitConversionType(typeid(shared int), typeid(int)) == ImplicitConversionType.none_);
 }
 
 private Variant getFieldValue(InstanceType, size_t fieldIndex)(ValueMetadata metadata, Variant instanceWrapper) {
@@ -2190,6 +2198,7 @@ private template isPrimitive(Tv...) if(Tv.length == 1) {
 	enum isPrimitive = false;
 }+/
 
+@name("Primitive Tests")
 unittest {
 	static assert(isPrimitive!int);
 	static assert(isPrimitive!(int[]));

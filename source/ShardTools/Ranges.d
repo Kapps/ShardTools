@@ -4,6 +4,7 @@
 /// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.Ranges;
 import std.algorithm, std.range, std.array;
+import ShardTools.Udas;
 
 
 /// Returns a range created by first invoking `pred` on an element, then invoking it on that element, and so on.
@@ -14,6 +15,7 @@ auto generate(alias pred, T)(T element) {
 }
 
 ///
+@name("Generate Tests")
 unittest {
 	class Foo {
 		size_t val;
@@ -28,12 +30,20 @@ unittest {
 	assert(equal(elements.generate!(c=>c.parent).until!(c=>c is null).map!(c=>c.val), [1, 2, 3, 4, 5]));
 }
 
-/// Returns a range that takes the given range and prepends the specified element.
+/// Returns a range that takes the given range and prepends or appends the specified element.
 auto prepend(R, T)(R range, T element) {
 	return only(element).chain(range);
 }
 
+/// Ditto
+auto append(R, T)(R range, T element) {
+	return range.chain(only(element));
+}
+
 ///
+@name("Prepend / Append Tests")
 unittest {
 	assert(equal([2, 3, 4].prepend(1), [1, 2, 3, 4]));
+	assert(equal([2, 3, 4].append(5), [2, 3, 4, 5]));
+	assert(equal([2, 3, 4].prepend(1).append(5).prepend(0), [0, 1, 2, 3, 4, 5]));
 }

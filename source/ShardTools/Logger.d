@@ -9,7 +9,9 @@ private import std.datetime;
 import std.format;
 import ShardTools.SpinLock;
 import ShardTools.ExceptionTools;
+import ShardTools.Udas;
 
+@name("Integration Tests")
 unittest {
 	class TestLogger : Logger {
 		int started, ended;
@@ -221,7 +223,10 @@ private struct FormatSinkOutputRange(Char) {
 
 private @nogc SysTime currTimeNoGC() {
 	alias FuncType = @nogc SysTime function(immutable TimeZone tz = LocalTime());
-	auto funcGC = &Clock.currTime;
+	static if(__VERSION__ >= 2069)
+		auto funcGC = &Clock.currTime!(ClockType.normal);
+	else
+		auto funcGC = &Clock.currTime;
 	auto func = cast(FuncType)funcGC;
 	return func();
 }

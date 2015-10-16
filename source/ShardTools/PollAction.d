@@ -3,6 +3,8 @@
 /// Authors: Ognjen Ivkovic
 /// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.PollAction;
+
+version(none) {
 import ShardTools.AsyncAction;
 import ShardTools.TaskRepeater;
 import ShardTools.Untyped;
@@ -42,4 +44,4 @@ private:
 		return Status == CompletionType.Incomplete ? RepeaterFlags.Continue : RepeaterFlags.None;
 	}
 }
-
+}

@@ -5,6 +5,7 @@
 /// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.ConcurrentStack;
 private import core.atomic;
+import ShardTools.Udas;
 
 /// Provides a Concurrent Stack that uses cas operations to allow operations to be performed in a lock-free fashion.
 /// Note that this implementation does not attempt to work around the ABA problem, so manual memory management of stored values is not recommended.
@@ -96,6 +97,7 @@ public:
 		return Result;
 	}
 
+	@name("Basic Tests")
 	unittest {
 		ConcurrentStack!int Stack = new ConcurrentStack!int();
 		Stack.Push(3);

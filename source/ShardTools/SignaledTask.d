@@ -3,6 +3,8 @@
 /// Authors: Ognjen Ivkovic
 /// Copyright: © 2013 Ognjen Ivkovic
 module ShardTools.SignaledTask;
+
+version(none) {
 public import ShardTools.Event;
 import std.typecons;
 
@@ -33,4 +35,5 @@ protected:
 	override void PerformAbort() {
 		// No action is needed.
 	}
+}
 }
