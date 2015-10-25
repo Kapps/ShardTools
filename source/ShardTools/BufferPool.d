@@ -1,4 +1,6 @@
 ﻿/// Provides a BufferPool for efficient means of pooling buffers in a thread-safe way.
+/// $(RED With the introduction of std.allocator, this class can be much better replaced by an allocator and thus should be considered deprecated.)
+/// $(RED In addition, the current implementation of this class is very poorly done.)
 /// License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>
 /// Authors: Ognjen Ivkovic
 /// Copyright: © 2013 Ognjen Ivkovic

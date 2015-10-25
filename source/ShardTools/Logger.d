@@ -60,10 +60,15 @@ enum LogLevel {
 
 /// Provides information about a message to be logged.
 struct LogHeader {
+	/// The severity of the log message.
 	const LogLevel level;
+	/// The time that the message started being logged.
 	const SysTime time;
+	/// The file invoking the log function.
 	const string file;
+	/// The line within `file` invoking the log function.
 	const int line;
+	/// The caller function.
 	const string func;
 
 	///

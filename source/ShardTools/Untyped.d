@@ -9,6 +9,7 @@ import std.exception;
 import core.stdc.string;
 import std.typecons;
 import ShardTools.Udas;
+import std.variant;
 
 mixin(MakeException("InvalidCastException", "The type stored in Untyped did not match the given type."));
 
@@ -18,21 +19,23 @@ mixin(MakeException("InvalidCastException", "The type stored in Untyped did not 
 /// Untyped will allocate GC memory for structs that are greater than the size of a void pointer.
 /// Otherwise, Untyped will allocate only if typeid allocates or if an exception is thrown.
 /// $(RED The implementation of this struct is still extremely poor; use with caution.)
-struct Untyped {	
+struct Untyped {
 
-	this(T)(T Value) {
-		store(Value);
+	private enum maxSize = std.variant.maxSize!(creal, char[], void delegate());
+
+	/// Creates an Untyped from the given value.
+	this(T)(T value) {
+		store(value);
 	}
 
-	alias get this;
-
+	/// An operator equivalent to `get`.
 	T opCast(T)() {
 		return get!T;
 	}
 	
 	/// Gets the type that's stored within this instance.
 	@property TypeInfo type() {
-		return StoredType;	
+		return _type;	
 	}
 
 	/// Gets the underlying value as the given type.
@@ -41,7 +44,7 @@ struct Untyped {
 	@property T get(T)() {
 		T result;
 		if(!tryGet!(T)(result))
-			throw new InvalidCastException("Unable to cast from " ~ to!string(StoredType) ~ " to " ~ to!string(typeid(T)) ~ ".");
+			throw new InvalidCastException("Unable to cast from " ~ to!string(_type) ~ " to " ~ to!string(typeid(T)) ~ ".");
 		return result;
 	}
 
@@ -52,32 +55,31 @@ struct Untyped {
 		// I'd imagine the check is fairly expensive, especially with the currently slow(?) implementation of typeid comparison.
 		// TODO: Consider allowing signed vs unsigned primitives. And arrays of such?
 		TypeInfo ti = typeid(T);
-		TypeInfo_Class classType = cast(TypeInfo_Class)StoredType;
-		if(StoredType != ti) {
-			//debug std.stdio.writefln("Trying to cast from %s to %s.", StoredType, ti);
-			if(cast(TypeInfo_Class)StoredType) {
-				//debug std.stdio.writefln("Determined StoredType is class: %s.", cast(TypeInfo_Class)StoredType);
+		TypeInfo_Class classType = cast(TypeInfo_Class)_type;
+		if(_type != ti) {
+			if(cast(TypeInfo_Class)_type) {
+				//debug std.stdio.writefln("Determined _type is class: %s.", cast(TypeInfo_Class)_type);
 				// First, check if our result can be casted to that type, if it's a class.
 				static if(is(T == class)) {
-					if(auto casted = cast(T)cast(Object)Data) {
+					if(auto casted = cast(T)cast(Object)dataPtr) {
 						value = casted; 
 						return true;
 					}
 				}
 			}
-			//debug std.stdio.writefln("Failed get.");
 			return false;
 
 		}
 		static if(is(T == class)) {
-			value = cast(T)cast(Object)Data;
+			value = cast(T)cast(Object)dataPtr;
 			if(value is null) //|| typeid(value) != typeid(T))
 				return false;
 		} else {
-			static if(T.sizeof <= (void*).sizeof) {
-				value = *(cast(T*)&Data);
+			static if(T.sizeof <= maxSize) {
+				memcpy(&value, dataBytes.ptr, T.sizeof);
+				//value = *(cast(T*)&data);
 			} else {
-				T* ptr = cast(T*)Data;
+				T* ptr = cast(T*)dataPtr;
 				value = *ptr;
 			}
 		}
@@ -86,22 +88,22 @@ struct Untyped {
 
 	bool opEquals(T)(T other) {
 		static if(is(T == Untyped)) {
-			if(other.StoredType != this.StoredType)
+			if(other._type != this._type)
 				return false;
-			if(auto ci = cast(ClassInfo)StoredType) {
+			if(auto ci = cast(ClassInfo)_type) {
 				// Turns out TypeInfo_Struct can be casted to ClassInfo...
 				// But in this case their vtbl is null, so we can differ by using that.
 				// For classes we can't use TypeInfo.equals as it always seems to be true.
 				if(ci.vtbl is null)
-					return cast(Object)Data == cast(Object)other.Data;
+					return cast(Object)dataPtr == cast(Object)other.dataPtr;
 			}
 			// Otherwise it's a struct/array/etc, and we can use TypeInfo.equals to check.
 			void* a, b;
-			if(StoredType.tsize <= (void*).sizeof)
-				a = &Data, b = &other.Data;
+			if(_type.tsize <= maxSize)
+				a = dataBytes.ptr, b = other.dataBytes.ptr;
 			else
-				a = Data, b = other.Data;
-			return StoredType.equals(a, b);
+				a = dataPtr, b = other.dataPtr;
+			return _type.equals(a, b);
 		} else {
 			T currVal;
 			if(!this.tryGet!(T)(currVal))
@@ -112,32 +114,50 @@ struct Untyped {
 
 	void opAssign(T)(T rhs) {
 		static if(is(T == Untyped)) {
-			this.Data = rhs.Data;
-			this.StoredType = rhs.StoredType;
+			this.dataBytes = rhs.dataBytes;
+			this._type = rhs._type;
+			if(this._type) {
+				if(this._type.tsize > maxSize)
+					_type.destroy(dataBytes.ptr);
+				else
+					_type.destroy(dataPtr);
+			}
 		} else {
 			store(rhs);
 		}
 	}
 
-	private void store(T)(T Value) {
-		StoredType = typeid(T);
+	private void store(T)(T value) {
+		if(this._type) {
+			if(this._type.tsize > maxSize)
+				_type.destroy(dataPtr);
+			else
+				_type.destroy(dataBytes.ptr);
+		}
+		_type = typeid(T);
 		static if(is(T == class)) {
-			Data = cast(void*)Value;
+			dataPtr = cast(void*)value;
 		} else {
 			// Optimization for small values.
-			static if(T.sizeof <= (void*).sizeof)
-				Data = *(cast(void**)&Value);
-			else {
-				Data = GC.malloc(T.sizeof);
-				//memcpy(Data, &Value, T.sizeof);
-				*(cast(T*)Data) = Value;
+			static if(T.sizeof <= maxSize) {
+				//data = *(cast(T*)&value);
+				memcpy(dataBytes.ptr, &value, T.sizeof);
+				_type.postblit(dataBytes.ptr);
+				//GC.addRange(dataBytes.ptr, T.sizeof, typeid(T));
+			} else {
+				dataPtr = GC.malloc(T.sizeof);
+				memcpy(dataPtr, &value, T.sizeof);
+				_type.postblit(dataPtr);
+				//*(cast(T*)data) = value;
 			}
 		}
 	}
 
-	private TypeInfo StoredType;
-	private void* Data;
-
+	private TypeInfo _type;
+	union {
+		private void[maxSize] dataBytes;
+		private void* dataPtr;
+	}
 }
 
 version(unittest) {
@@ -146,11 +166,13 @@ version(unittest) {
 		int a = 2;
 	}
 	struct UntypedDebugStruct {
-		int first = 1;
+		long first = 1;
 		void* second = cast(void*)2;
 		int third = 3;
+		long fourth = 4;
 	}
 }
+	import  std.stdio;
 
 // TODO: Clean up below test and add it as documentation tests.
 
@@ -167,9 +189,6 @@ private unittest {
 	// Below requires comparing Untyped instances to be fixed.
 	/+assert(stored != Untyped(3));
 	assert(stored == Untyped(2));+/
-	// Below requires alias this working with templates?
-	/+int storedVal = stored;
-		assert(storedVal == 2);+/
 	assertThrown!(InvalidCastException)(cast(float)stored);
 	auto a = new Object();
 	auto b = new Object();
@@ -195,11 +214,36 @@ private unittest {
 	assert(g.get!UntypedDebugClass is dbgcls);
 	assert(g == cast(Object)dbgcls);
 	assert(g == dbgcls);
-	assertThrown!(InvalidCastException)(g.get!(std.container.RedBlackTree!(int)));
-
+	import std.container;
+	assertThrown!(InvalidCastException)(g.get!(RedBlackTree!(int)));
 	UntypedDebugStruct dbgstruct;
 	Untyped h = dbgstruct;
 	assert(h.get!UntypedDebugStruct == dbgstruct);
 	assert(h.get!UntypedDebugStruct.third == 3);
+	assert(h.get!UntypedDebugStruct.fourth == 4);
+	assert(h == dbgstruct);
 	assertThrown!(InvalidCastException)(h.get!int);
+
+	alias DelegateType = void delegate();
+	int tmp = 0;
+	DelegateType foo = () {
+		tmp++;
+	};
+
+	Untyped i = foo;
+	auto dg = i.get!DelegateType();
+	assert(dg == foo);
+	dg = null;
+	foo = null;
+	GC.collect();
+	dg = i.get!DelegateType();
+	dg();
+	assert(tmp == 1);
+
+	auto j = RefCounted!int(4);
+	assert(j.refCountedStore.refCount == 1);
+	Untyped k = j;
+	assert(j.refCountedStore.refCount == 2);
+	k = null;
+	assert(j.refCountedStore.refCount == 1);
 }

@@ -238,7 +238,7 @@ struct Command {
 	bool value;
 	CommandFlags flags;
 
-	this(bool val = true) {
+	this(bool val) {
 		this.value = val;
 		this.flags = CommandFlags.none;
 	}
@@ -272,7 +272,7 @@ struct ShortName {
 /// The method this is applied to must have zero arguments and return void.
 struct CommandInitializer {
 	bool value;
-	this(bool value = true) {
+	this(bool value) {
 		this.value = value;
 	}
 }

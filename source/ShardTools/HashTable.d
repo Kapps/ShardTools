@@ -125,7 +125,7 @@ struct HashTableImpl(Key, Value, alias comparer = (a, b) => a == b) {
 			}
 			_length--;
 			_numRoots--;
-			tryLogf("Load factor is %s.", loadFactor);
+			//tryLogf("Load factor is %s.", loadFactor);
 			if(loadFactor <= loadMin && _entries.length > MIN_ENTRIES * 2)
 				resizeTable(_entries.length / 2);
 			return res;
@@ -247,7 +247,7 @@ private /+@nogc+/:
 	alias GCFun = @nogc void function(in void*) nothrow;
 
 	void resizeTable(size_t newSize) {
-		tryLogf("Resizing from %s to %s elements.", _entries.length, newSize);
+		//tryLogf("Resizing from %s to %s elements.", _entries.length, newSize);
 		Entry[] _oldEntries = _entries;
 		scope(exit) {
 			if(_oldEntries) {
