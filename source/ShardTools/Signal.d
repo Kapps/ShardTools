@@ -97,6 +97,9 @@ private:
 	}
 }
 
+/// Ditto
+alias Signal(Args...) = std.typecons.RefCounted!(SignalImpl!(Args));
+
 /// Basic Signal example
 unittest {
 	int lastVal = 0;
@@ -137,5 +140,3 @@ unittest {
 	assert(lastVal == 100 && lastStr == "adad");
 
 }
-
-alias Signal(Args...) = std.typecons.RefCounted!(SignalImpl!(Args));
