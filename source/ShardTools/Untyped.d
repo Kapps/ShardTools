@@ -28,6 +28,14 @@ struct Untyped {
 		store(value);
 	}
 
+	this(this) {
+		runPostblit();
+	}
+
+	~this() {
+		runDestroy();
+	}
+
 	/// An operator equivalent to `get`.
 	T opCast(T)() {
 		return get!T;
@@ -82,6 +90,7 @@ struct Untyped {
 				T* ptr = cast(T*)dataPtr;
 				value = *ptr;
 			}
+			runPostblit();
 		}
 		return true;
 	}
@@ -114,26 +123,16 @@ struct Untyped {
 
 	void opAssign(T)(T rhs) {
 		static if(is(T == Untyped)) {
+			runDestroy();
 			this.dataBytes = rhs.dataBytes;
 			this._type = rhs._type;
-			if(this._type) {
-				if(this._type.tsize > maxSize)
-					_type.destroy(dataBytes.ptr);
-				else
-					_type.destroy(dataPtr);
-			}
 		} else {
 			store(rhs);
 		}
 	}
 
 	private void store(T)(T value) {
-		if(this._type) {
-			if(this._type.tsize > maxSize)
-				_type.destroy(dataPtr);
-			else
-				_type.destroy(dataBytes.ptr);
-		}
+		runDestroy();
 		_type = typeid(T);
 		static if(is(T == class)) {
 			dataPtr = cast(void*)value;
@@ -142,14 +141,31 @@ struct Untyped {
 			static if(T.sizeof <= maxSize) {
 				//data = *(cast(T*)&value);
 				memcpy(dataBytes.ptr, &value, T.sizeof);
-				_type.postblit(dataBytes.ptr);
 				//GC.addRange(dataBytes.ptr, T.sizeof, typeid(T));
 			} else {
 				dataPtr = GC.malloc(T.sizeof);
 				memcpy(dataPtr, &value, T.sizeof);
-				_type.postblit(dataPtr);
 				//*(cast(T*)data) = value;
 			}
+			runPostblit();
+		}
+	}
+
+	private void runPostblit() {
+		if(this._type) {
+			if(_type.tsize <= maxSize)
+				_type.postblit(dataBytes.ptr);
+			else
+				_type.postblit(dataPtr);
+		}
+	}
+
+	private void runDestroy() {
+		if(this._type) {
+			if(_type.tsize <= maxSize)
+				_type.destroy(dataBytes.ptr);
+			else
+				_type.postblit(dataPtr);
 		}
 	}
 
@@ -172,7 +188,6 @@ version(unittest) {
 		long fourth = 4;
 	}
 }
-	import  std.stdio;
 
 // TODO: Clean up below test and add it as documentation tests.
 
@@ -240,10 +255,25 @@ private unittest {
 	dg();
 	assert(tmp == 1);
 
+	int[] arr = [1, 2, 3];
+	Untyped arrU = arr;
+	assert(arrU.get!(int[]) == [1, 2, 3]);
+	int[3] sarr = [1, 2, 3];
+	Untyped sarrU = sarr;
+	assert(sarrU.get!(int[3]) == [1, 2, 3]);
+
 	auto j = RefCounted!int(4);
 	assert(j.refCountedStore.refCount == 1);
 	Untyped k = j;
 	assert(j.refCountedStore.refCount == 2);
+	Untyped l = k;
+	assert(j.refCountedStore.refCount == 3);
+	assert(l.get!(RefCounted!int) == 4);
+	assert(k.get!(RefCounted!int) == 4);
 	k = null;
+	assert(j.refCountedStore.refCount == 2);
+	l = null;
+	assert(j.refCountedStore.refCount == 1);
+	l = 2;
 	assert(j.refCountedStore.refCount == 1);
 }
