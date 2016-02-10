@@ -1,5 +1,5 @@
 ﻿/// $(RED This module is not implemented.)
-﻿module ShardTools.Trie;
+module ShardTools.Trie;
 import std.container.array;
 import std.typecons;
 import core.stdc.stdlib;
