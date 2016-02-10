@@ -10,7 +10,7 @@ import core.stdc.stdlib;
 alias Trie(Value, Key = dchar) = RefCounted!(TrieImpl!(Value, Key), RefCountedAutoInitialize.yes);
 
 /// Ditto
-struct TrieImpl(Value, Key = dchar) {
+@disable struct TrieImpl(Value, Key = dchar) {
 
 	/// Required to free all internally allocated memory for the struct.
 	~this() {
